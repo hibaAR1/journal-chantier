@@ -1,0 +1,29 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\ProductCategory;
+use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use Illuminate\Database\Seeder;
+
+class ProductCategorySeeder extends Seeder
+{
+    /**
+     * Run the database seeds.
+     */
+    public function run(): void
+    {
+        $list = [
+            'Agglos et Sable',
+            'Béton',
+            'Ciment en Sacs',
+            'Gasoil',
+        ];
+
+        foreach ($list as $item) {
+            ProductCategory::create([
+                'name' => $item,
+            ]);
+        }
+    }
+}

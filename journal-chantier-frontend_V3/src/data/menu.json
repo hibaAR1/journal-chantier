@@ -1,0 +1,62 @@
+[
+  {
+    "title": "Acceuil",
+    "name": "home",
+    "permission": "view dashboard"
+  },
+  {
+    "title": "Tiers",
+    "name": "third-party",
+    "permission": "view third parties"
+  },
+  {
+    "title": "Articles",
+    "name": "products",
+    "permission": "view products"
+  },
+  {
+    "title": "Chantiers",
+    "name": "sites",
+    "permission": "view sites"
+  },
+  {
+    "title": "Travaux",
+    "name": "works",
+    "permission": "view works"
+  },
+  {
+    "title": "Emplacemets",
+    "name": "locations",
+    "permission": "view locations"
+  },
+  {
+    "title": "Ressources",
+    "name": "resources",
+    "permission": "view resources"
+  },
+  {
+    "title": "Ouvriers",
+    "name": "workers",
+    "permission": "view workers"
+  },
+  {
+    "title": "Affectations",
+    "name": "assignments",
+    "permission": "view assignments"
+  },
+  {
+    "title": "Pointages",
+    "name": "punches",
+    "permission": "view punches"
+  },
+  {
+    "title": "Journaux",
+    "name": "reports",
+    "permission": "view reports"
+  },
+  {
+    "title": "Utilisateurs",
+    "name": "users",
+    "permission": "view users"
+  }
+]

@@ -1,0 +1,9 @@
+.custom-loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.custom-loading svg > :nth-child(1) {
+    stroke-width: .2;
+}
