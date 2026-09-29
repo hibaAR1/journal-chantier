@@ -82,7 +82,7 @@ const DashboardTaskTotalsLayout = ({ rows = [] }) => {
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
-            <TableRow key={`${row.task}-${row.unit}`}>
+            <TableRow key={row.work_type_id ?? `${row.task}-${row.unit}`}>
               <TableCell>{row.task ?? "–"}</TableCell>
               <TableCell>{row.unit ?? "–"}</TableCell>
               <TableCell className="text-right tabular-nums">

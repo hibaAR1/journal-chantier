@@ -44,7 +44,7 @@ class DashboardController extends Controller
     /**
      * GET /api/dashboard/daily?site_id=1&date=2026-07-07
      *
-     * Si "date" est absente, on prend la date du dernier journal du chantier.
+     * Si "date" est absente, on prend le dernier journal du chantier contenant du travail saisi.
      */
     public function daily(Request $request)
     {
@@ -65,7 +65,7 @@ class DashboardController extends Controller
 
         $date = $request->filled('date')
             ? Carbon::parse($request->date)->format('Y-m-d')
-                        : $this->lastWorkedDate([$site->id]);
+            : $this->lastWorkedDate([$site->id]);
 
         $report = $date
             ? Report::with([
@@ -123,7 +123,7 @@ class DashboardController extends Controller
             return $this->errorMessage($this->moduleName, 403);
         }
 
-              $lastReportDate = $this->lastWorkedDate([$site->id]);
+        $lastReportDate = $this->lastWorkedDate([$site->id]);
 
         $to = $request->filled('to')
             ? Carbon::parse($request->to)
@@ -228,6 +228,7 @@ class DashboardController extends Controller
                 $workType = $rows->first()['task']->workType;
 
                 return [
+                    'work_type_id' => optional($workType)->id,
                     'task' => optional($workType)->name,
                     'unit' => optional(optional($workType)->work)->unit,
                     'quantity' => round($rows->sum(fn($row) => $row['task']->quantity_completed ?? 0), 2),
@@ -261,7 +262,7 @@ class DashboardController extends Controller
 
         $siteIds = $this->visibleSiteIds();
 
-               $lastReportDate = $this->lastWorkedDate($siteIds);
+        $lastReportDate = $this->lastWorkedDate($siteIds);
 
         $to = $request->filled('to')
             ? Carbon::parse($request->to)
@@ -274,6 +275,7 @@ class DashboardController extends Controller
         $reports = Report::with([
             'site:id,name',
             'reportWorkTypes.workType.work',
+            'reportWorkTypes.workType.site:id,name',
             'reportWorkTypes.reportWorkTypeWorkers',
         ])
             ->whereIn('site_id', $siteIds)
@@ -294,7 +296,7 @@ class DashboardController extends Controller
             fn($report) => $this->workedTasks($report->reportWorkTypes)->map(fn($task) => ['site_id' => $report->site_id, 'task' => $task])
         );
 
-                $sharedTasks = $this->sharedTasks($tasks);
+        $sharedTasks = $this->sharedTasks($tasks);
         $periodTasks = $this->periodTasks($tasks);
 
         // Tâche comparée : celle demandée (si elle a été réalisée sur la période),
@@ -303,12 +305,13 @@ class DashboardController extends Controller
         $workTypeId = collect($periodTasks)->contains('id', $requested)
             ? $requested
             : (collect($sharedTasks)->first()['work_type_id'] ?? collect($periodTasks)->first()['id'] ?? null);
+
         return response()->json([
             'from' => $from->format('Y-m-d'),
             'to' => $to->format('Y-m-d'),
             'sites' => $sites->map(fn($site) => ['id' => $site->id, 'name' => $site->name])->all(),
             'sites_hours' => $this->sitesHours($reports, $sites),
-                       'tasks' => $periodTasks,
+            'tasks' => $periodTasks,
             'task_comparison' => $this->taskComparison($tasks, $sites, $workTypeId),
             'multi_tasks' => $sharedTasks,
         ]);
@@ -354,7 +357,7 @@ class DashboardController extends Controller
             ->sortBy('name')
             ->map(fn($workType) => [
                 'id' => $workType->id,
-                'name' => $workType->name,
+                'name' => $this->taskLabel($workType),
                 'unit' => optional($workType->work)->unit,
             ])
             ->values()
@@ -385,7 +388,7 @@ class DashboardController extends Controller
 
         return [
             'work_type_id' => $workTypeId,
-            'task' => optional($workType)->name,
+            'task' => $workType ? $this->taskLabel($workType) : null,
             'unit' => optional(optional($workType)->work)->unit,
             'reference_unit_time' => optional($workType)->t_u !== null ? (float) $workType->t_u : null,
             'values' => $values,
@@ -409,7 +412,7 @@ class DashboardController extends Controller
 
                 return [
                     'work_type_id' => (int) $workTypeId,
-                    'task' => optional($workType)->name,
+                    'task' => $workType ? $this->taskLabel($workType) : null,
                     'unit' => optional(optional($workType)->work)->unit,
                     'unit_times' => $unitTimes->all(), // { site_id: TU }
                 ];
@@ -432,9 +435,6 @@ class DashboardController extends Controller
     }
 
     /**
-     * Identifiants des chantiers visibles par l'utilisateur (même règle que les journaux).
-     */
-        /**
      * Date du dernier journal contenant du travail saisi (au moins un ouvrier sur une tâche),
      * pour les périodes par défaut : on évite d'ouvrir le tableau de bord sur un journal vide.
      * S'il n'y en a aucun, on prend le dernier journal tout court.
@@ -450,6 +450,10 @@ class DashboardController extends Controller
 
         return $report ? Carbon::parse($report->date)->format('Y-m-d') : null;
     }
+
+    /**
+     * Identifiants des chantiers visibles par l'utilisateur (même règle que les journaux).
+     */
     private function visibleSiteIds(): array
     {
         if (Gate::allows('view all reports')) {
@@ -494,7 +498,7 @@ class DashboardController extends Controller
         $siteIds = $this->visibleSiteIds();
 
         // Catalogue : tâches globales + tâches propres aux chantiers visibles
-        $catalog = WorkType::with('work')
+        $catalog = WorkType::with(['work', 'site:id,name'])
             ->where(fn($query) => $query->whereNull('site_id')->orWhereIn('site_id', $siteIds))
             ->when($request->filled('work_id'), fn($query) => $query->where('work_id', $request->work_id))
             ->orderBy('name')
@@ -524,7 +528,7 @@ class DashboardController extends Controller
 
             return [
                 'id' => $workType->id,
-                'task' => $workType->name,
+                'task' => $this->taskLabel($workType),
                 'category' => optional($workType->work)->name,
                 'unit' => optional($workType->work)->unit,
                 'average_unit_time' => $this->rounded($average),
@@ -536,13 +540,7 @@ class DashboardController extends Controller
             ];
         })
             // Par ordre de fiabilité décroissante (nombre de relevés), puis par nom
-            ->sort(function ($a, $b) {
-                if ($a['readings'] === $b['readings']) {
-                    return strcmp($a['task'], $b['task']);
-                }
-
-                return $b['readings'] <=> $a['readings'];
-            })
+            ->sortBy([['readings', 'desc'], ['task', 'asc']])
             ->values()
             ->all();
 
@@ -677,6 +675,17 @@ class DashboardController extends Controller
         $hours = $this->taskHours($task);
 
         return ($hours > 0 && $task->quantity_completed > 0) ? $hours / $task->quantity_completed : null;
+    }
+
+    /**
+     * Nom de la tâche ; pour une tâche propre à un chantier (scope "C"), on ajoute le chantier
+     * afin de la distinguer d'une tâche globale du même nom : "Maçonnerie (Villa Test)".
+     */
+    private function taskLabel(WorkType $workType): string
+    {
+        return $workType->site_id && $workType->site
+            ? "{$workType->name} ({$workType->site->name})"
+            : $workType->name;
     }
 
     private function rounded(?float $value): ?float

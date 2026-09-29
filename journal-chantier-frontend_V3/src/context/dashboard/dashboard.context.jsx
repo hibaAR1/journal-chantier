@@ -28,8 +28,16 @@ const DashboardContext = createContext({
   pricesError: null,
 });
 
-const errorMessage = (response) =>
-  response?.data?.message || "Impossible de charger le tableau de bord.";
+// Messages d'erreur en français (le backend renvoie ses messages en anglais)
+const errorMessage = (response) => {
+  if (response?.status === 403)
+    return "Vous n'avez pas accès à ce chantier ou à ce tableau de bord.";
+  if (response?.status === 422)
+    return "Filtres invalides : vérifiez les dates choisies.";
+  if (!response)
+    return "Serveur injoignable : vérifiez que le backend est démarré.";
+  return "Impossible de charger le tableau de bord.";
+};
 
 export const DashboardProvider = ({ children }) => {
   const [sites, setSites] = useState([]);
