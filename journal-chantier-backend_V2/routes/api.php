@@ -93,6 +93,12 @@ Route::middleware(['check.token.expiration', 'auth:sanctum'])->group(function ()
 
     Route::patch('/report-work-type/{id}/reinstate', [\App\Http\Controllers\ReportWorkTypeController::class, 'reinstate']);
     Route::get('/reports/{id}/is-last', [\App\Http\Controllers\ReportController::class, 'isLast']);
+        Route::post('/change-password', [\App\Http\Controllers\Auth\ChangePasswordController::class, 'store']);
 
-});
+    // Tableau de bord journalier (cahier des charges V3 — § 2.2)
+    Route::get('/dashboard/daily', [\App\Http\Controllers\DashboardController::class, 'daily']);
+    Route::get('/dashboard/history', [\App\Http\Controllers\DashboardController::class, 'history']);
+        Route::get('/dashboard/comparison', [\App\Http\Controllers\DashboardController::class, 'comparison']);
+       Route::get('/dashboard/prices', [\App\Http\Controllers\DashboardController::class, 'prices']);
+        });
 

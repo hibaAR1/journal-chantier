@@ -1,4 +1,4 @@
-import {createBrowserRouter} from "react-router-dom";
+import { createBrowserRouter } from "react-router-dom";
 
 import AppLayout from "../layouts/app/app.layout.jsx";
 import GuestLayout from "../layouts/guest/guest.layout.jsx";
@@ -31,47 +31,108 @@ import UsersPage from "../pages/users/users.page.jsx";
 import RoleUsersPage from "../pages/role-user/role-users.page.jsx";
 import PermissionsPage from "../pages/permisssions/PermissionsPage.jsx";
 
-export const HOME_ROUTE = '/';
-export const LOGIN_ROUTE = '/login';
+export const HOME_ROUTE = "/";
+export const LOGIN_ROUTE = "/login";
 
 export const router = createBrowserRouter([
-    {
-        element: <AppLayout/>,
-        children: [
-            { path: '/', element: <HomePage />, name: "home", permission: "view dashboard" },
-            { path: '/home', name: "home", permission: "view dashboard" },
-            { path: '/third-party', element: <ThirdPartyPage />,  name: "third-party", permission: "view third parties" },
-            { path: '/products', element: <ProductsPage />,  name: "products", },
-            { path: '/product-categories', element: <ProductCategoriesPage />,  name: "products", },
-            { path: '/sites', element: <SitesPage />,  name: "sites", },
-            { path: '/site-locations/:siteId', element: <SiteLocationsPage />,  name: "sites", },
-            {path : '/site-works/:siteId', element: <SiteWorksPage/>, name: "site-works"},
-            {path : '/site-works-type/:siteId', element: <SiteWorkTypePage/>, name: "site-works"},
-            { path: '/locations', element: <LocationsPage />,  name: "locations", },
-            { path: '/resources', element: <ResourcesPage />,  name: "resources", },
-            { path: '/works', element: <WorksPage />,  name: "works", },
-            { path: '/work-types', element: <WorkTypesPage />,  name: "works", },
-            { path: '/movements', element: <MovementsPage />,  name: "movements", },
-            { path: '/workers', element: <WorkersPage />,  name: "workers", },
-            { path: '/assignments', element: <AssignmentsPage />,  name: "assignments", },
-            { path: '/assignment-workers/:assignmentId', element: <AssignmentWorkersPage />,  name: "assignments", },
-            { path: '/punches', element: <PunchesPage />,  name: "punches", },
-            { path: '/punch-workers/:punchId', element: <PunchWorkersPage />,  name: "punches", },
-            { path: '/reports', element: <ReportsPage />,  name: "reports", },
-            {path: '/report-work-types/:reportId', element: <ReportWorkTypesPage />,  name: "reports",},
-            {path: '/report-work-type-workers/:reportWorkTypeId', element: <ReportWorkTypeWorkersPage />,  name: "reports",},
-            {path: '/users', element: <UsersPage />,  name: "users", },
-            { path: '/roles', element: <RoleUsersPage />,  name: "roles", },
-            { path: '/permissions', element: <PermissionsPage />,  name: "permissions", }
-        ]
-    },    {
-        element: <GuestLayout/>,
-        children: [
-            {
-                path: '/login', element: <LoginPage/>, name: "login",
-            }, {
-                path: "*", element: <ErrorPage /> , name: "404"
-            },
-        ]
-    }
+  {
+    element: <AppLayout />,
+    children: [
+      {
+        path: "/",
+        element: <HomePage />,
+        name: "home",
+        permission: "view dashboard",
+      },
+      {
+        path: "/home",
+        element: <HomePage />,
+        name: "home",
+        permission: "view dashboard",
+      },
+      {
+        path: "/third-party",
+        element: <ThirdPartyPage />,
+        name: "third-party",
+        permission: "view third parties",
+      },
+      { path: "/products", element: <ProductsPage />, name: "products" },
+      {
+        path: "/product-categories",
+        element: <ProductCategoriesPage />,
+        name: "products",
+      },
+      { path: "/sites", element: <SitesPage />, name: "sites" },
+      {
+        path: "/site-locations/:siteId",
+        element: <SiteLocationsPage />,
+        name: "sites",
+      },
+      {
+        path: "/site-works/:siteId",
+        element: <SiteWorksPage />,
+        name: "site-works",
+      },
+      {
+        path: "/site-works-type/:siteId",
+        element: <SiteWorkTypePage />,
+        name: "site-works",
+      },
+      { path: "/locations", element: <LocationsPage />, name: "locations" },
+      { path: "/resources", element: <ResourcesPage />, name: "resources" },
+      { path: "/works", element: <WorksPage />, name: "works" },
+      { path: "/work-types", element: <WorkTypesPage />, name: "works" },
+      { path: "/movements", element: <MovementsPage />, name: "movements" },
+      { path: "/workers", element: <WorkersPage />, name: "workers" },
+      {
+        path: "/assignments",
+        element: <AssignmentsPage />,
+        name: "assignments",
+      },
+      {
+        path: "/assignment-workers/:assignmentId",
+        element: <AssignmentWorkersPage />,
+        name: "assignments",
+      },
+      { path: "/punches", element: <PunchesPage />, name: "punches" },
+      {
+        path: "/punch-workers/:punchId",
+        element: <PunchWorkersPage />,
+        name: "punches",
+      },
+      { path: "/reports", element: <ReportsPage />, name: "reports" },
+      {
+        path: "/report-work-types/:reportId",
+        element: <ReportWorkTypesPage />,
+        name: "reports",
+      },
+      {
+        path: "/report-work-type-workers/:reportWorkTypeId",
+        element: <ReportWorkTypeWorkersPage />,
+        name: "reports",
+      },
+      { path: "/users", element: <UsersPage />, name: "users" },
+      { path: "/roles", element: <RoleUsersPage />, name: "roles" },
+      {
+        path: "/permissions",
+        element: <PermissionsPage />,
+        name: "permissions",
+      },
+    ],
+  },
+  {
+    element: <GuestLayout />,
+    children: [
+      {
+        path: "/login",
+        element: <LoginPage />,
+        name: "login",
+      },
+      {
+        path: "*",
+        element: <ErrorPage />,
+        name: "404",
+      },
+    ],
+  },
 ]);
