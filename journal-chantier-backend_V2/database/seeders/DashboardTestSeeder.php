@@ -16,11 +16,11 @@ use App\Models\WorkType;
 use Illuminate\Database\Seeder;
 
 /**
- * Données de TEST pour le tableau de bord (cahier des charges V3 — § 2.2 à 2.4).
+ * Données de TEST pour le tableau de bord (cahier des charges V3 — § 2.2 à 2.5).
  *
  *   php artisan db:seed --class=DashboardTestSeeder
  *
- * Crée 2 chantiers (hiba, Villa Test), 6 ouvriers et 4 journaux (26 → 28/09/2026).
+ * Crée 3 chantiers (hiba, Villa Test, Symphonie), 7 ouvriers et 5 journaux (26 → 28/09/2026).
  * Peut être relancé sans risque : les journaux de test sont vidés puis recréés à l'identique.
  * ⚠️ À utiliser uniquement en local, jamais sur la base de production.
  */
@@ -37,26 +37,31 @@ class DashboardTestSeeder extends Seeder
 
         $hiba = $this->site('hiba', $client, $user);
         $villa = $this->site('Villa Test', $client, $user);
+        $symphonie = $this->site('Symphonie', $client, $user);
 
         $blocHiba = $this->blocA($hiba);
         $blocVilla = $this->blocA($villa);
+        $blocSymphonie = $this->blocA($symphonie);
 
-        // Ouvriers : CDI / CDC = qualifiés, TECTRA = main d'oeuvre
+        // Qualifiés / main d'oeuvre selon la QUALIFICATION (et non le contrat) :
+        // Karim est en TECTRA mais Boiseur → qualifié ; Omar est en CDI mais Ouvrier travaux → main d'oeuvre.
         $w = [
-            'ali' => $this->worker('Ali', 'T001', 'CDI'),
-            'karim' => $this->worker('Karim', 'T002', 'CDC'),
-            'omar' => $this->worker('Omar', 'T003', 'TECTRA'),
-            'youssef' => $this->worker('Youssef', 'T004', 'TECTRA'),
-            'samir' => $this->worker('Samir', 'T005', 'CDI'),
-            'hamza' => $this->worker('Hamza', 'T006', 'TECTRA'),
+            'ali' => $this->worker('Ali', 'T001', 'CDI', 'Maçon'),
+            'karim' => $this->worker('Karim', 'T002', 'TECTRA', 'Boiseur'),
+            'omar' => $this->worker('Omar', 'T003', 'CDI', 'Ouvrier travaux'),
+            'youssef' => $this->worker('Youssef', 'T004', 'TECTRA', 'Ouvrier travaux'),
+            'samir' => $this->worker('Samir', 'T005', 'CDI', 'Boiseur'),
+            'hamza' => $this->worker('Hamza', 'T006', 'TECTRA', 'Ouvrier travaux'),
+            'nabil' => $this->worker('Nabil', 'T007', 'CDI', 'Boiseur'),
         ];
 
         // TU de référence (Pose volontairement sans référence → "–")
         $maconnerie = $this->workType('Maçonnerie', 1);
         $coff = $this->workType('COFF', 2);
         $pose = $this->workType('Pose', null);
+        $enduit = $this->workType('Enduit', null);
 
-        // [tâche, quantité, avancement, [[ouvrier, HN, HS], ...]]
+        // [tâche, quantité, avancement, [[ouvrier, HN, HS], ...], reportée automatiquement ?]
         $this->report($hiba, $blocHiba, '2026-09-26', [
             [$maconnerie, 16, 100, [[$w['ali'], 8, 2], [$w['omar'], 8, 0]]],
             [$coff, 10, 100, [[$w['karim'], 8, 0]]],
@@ -69,6 +74,8 @@ class DashboardTestSeeder extends Seeder
 
         $this->report($hiba, $blocHiba, '2026-09-28', [
             [$coff, 12, 100, [[$w['karim'], 8, 2], [$w['omar'], 8, 0]]],
+            // Copie automatique d'une tâche inachevée, SANS ouvrier : doit être ignorée par le tableau de bord
+            [$enduit, 5, 50, [], true],
         ]);
 
         $this->report($villa, $blocVilla, '2026-09-28', [
@@ -76,7 +83,12 @@ class DashboardTestSeeder extends Seeder
             [$maconnerie, 10, 100, [[$w['hamza'], 8, 0]]],
         ]);
 
-        $this->command?->info('Données de test du tableau de bord créées (hiba + Villa Test, du 26 au 28/09/2026).');
+        // Symphonie ne fait que du coffrage → "–" dans la colonne Symphonie pour Maçonnerie
+        $this->report($symphonie, $blocSymphonie, '2026-09-28', [
+            [$coff, 4, 100, [[$w['nabil'], 8, 0]]],
+        ]);
+
+        $this->command?->info('Données de test du tableau de bord créées (hiba, Villa Test, Symphonie — du 26 au 28/09/2026).');
     }
 
     private function site(string $name, Client $client, User $user): Site
@@ -100,12 +112,14 @@ class DashboardTestSeeder extends Seeder
         );
     }
 
-    private function worker(string $name, string $registrationNumber, string $contract): Worker
+    private function worker(string $name, string $registrationNumber, string $contract, string $qualification): Worker
     {
-        // Ressource de type 1 = main d'oeuvre
-        $resource = Resource::where('type', 1)->first() ?? Resource::first();
+        // Qualification = ressource de type 1 (main d'oeuvre) : Maçon, Boiseur, Ouvrier travaux…
+        $resource = Resource::where('type', 1)->where('name', $qualification)->first()
+            ?? Resource::where('type', 1)->first();
 
-        return Worker::firstOrCreate(
+        // updateOrCreate : les ouvriers de test retrouvent toujours la bonne qualification
+        return Worker::updateOrCreate(
             ['registration_number' => $registrationNumber],
             ['name' => $name, 'contract_type' => $contract, 'resource_id' => $resource->id]
         );
@@ -131,13 +145,17 @@ class DashboardTestSeeder extends Seeder
             $existing->forceDelete();
         }
 
-        foreach ($tasks as [$workType, $quantity, $progress, $workers]) {
+        foreach ($tasks as $item) {
+            [$workType, $quantity, $progress, $workers] = $item;
+            $isReported = $item[4] ?? false;
+
             $task = ReportWorkType::create([
                 'report_id' => $report->id,
                 'work_type_id' => $workType->id,
                 'site_location_id' => $location->id,
                 'stat_work' => $progress,
                 'quantity_completed' => $quantity,
+                'is_reported' => $isReported,
             ]);
 
             foreach ($workers as [$worker, $normalHours, $overtimeHours]) {

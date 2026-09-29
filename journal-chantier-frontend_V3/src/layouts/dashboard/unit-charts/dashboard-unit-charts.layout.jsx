@@ -49,7 +49,15 @@ const DashboardUnitChartsLayout = ({ days = [], series = [] }) => {
           key={serie.unit}
           className="rounded-md border border-primary-100 p-3"
         >
-          <p className="font-semibold mb-2">{serie.unit}</p>
+          <p className="font-semibold mb-2">
+            {serie.unit}
+            {serie.categories?.length > 0 && (
+              <span className="font-normal">
+                {" "}
+                ({serie.categories.join(" / ")})
+              </span>
+            )}
+          </p>
           <div className="h-[180px]">
             <Line
               data={{

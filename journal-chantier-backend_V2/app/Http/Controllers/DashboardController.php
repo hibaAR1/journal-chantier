@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Report;
 use App\Models\ReportWorkType;
-
 use App\Models\Site;
 use App\Models\Work;
 use App\Models\WorkType;
@@ -12,25 +11,35 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 
 /**
- * Tableau de bord journalier (Cahier des charges V3 — § 2.2).
+ * Tableau de bord — exploitation des journaux de chantier (Cahier des charges V3 — § 2.2 à 2.5).
  *
- * Vue synthétique d'un journal de chantier (un chantier + une date) :
- *  - indicateurs : heures normales, heures sup., effectif pointé, tâches achevées ;
- *  - effectif par catégorie de travaux (qualifiés / main d'oeuvre) ;
- *  - rendement par tâche (TU réel vs TU de référence).
+ *  - daily()      : tableau de bord journalier (§ 2.2)
+ *  - history()    : suivi historique d'un chantier (§ 2.3)
+ *  - comparison() : comparatif multi-chantiers (§ 2.4)
+ *  - prices()     : base de prix / référentiel des temps unitaires (§ 2.5)
+ *
+ * Règles communes :
+ *  - TU (temps unitaire) = heures (H.N + H.S) ÷ quantité ; rendement = quantité ÷ heures ;
+ *  - les valeurs sont calculées exactes et arrondies à 2 décimales uniquement à l'affichage ;
+ *  - les tâches reportées automatiquement sans ouvrier ne sont pas comptées (voir workedTasks()).
  */
 class DashboardController extends Controller
 {
     private $moduleName = 'Dashboard';
 
     /**
-     * Même règle de classement que ReportWorkType::hoursGrouped()
-     * afin que le tableau de bord affiche les mêmes chiffres que le journal.
+     * Classement de la main-d'oeuvre directe selon la QUALIFICATION de l'ouvrier
+     * (champ "Ressource"), comme demandé au § 2.6.2 et § 3.1.4 du cahier des charges :
+     *  - "Main d'oeuvre" = Ouvrier travaux ;
+     *  - "Qualifiés"     = le reste de la main-d'oeuvre directe.
+     * Le type de contrat (CDI, TECTRA…) n'entre pas en compte.
+     * Noms comparés sans accents ni majuscules ("Maçon" = "macon").
      */
-    private const QUALIFIED_CONTRACTS = ['CDI', 'CDC'];
-    private const LABOUR_CONTRACTS = ['TECTRA'];
+    private const LABOUR_QUALIFICATIONS = ['ouvrier travaux'];
+    private const QUALIFIED_QUALIFICATIONS = ['boiseur', 'macon', 'ferrailleur', 'poseur', 'traceur', 'platrier', 'grutier'];
 
     /**
      * GET /api/dashboard/daily?site_id=1&date=2026-07-07
@@ -62,14 +71,14 @@ class DashboardController extends Controller
             ? Report::with([
                 'reportWorkTypes.workType.work',
                 'reportWorkTypes.siteLocation',
-                'reportWorkTypes.reportWorkTypeWorkers.worker',
+                'reportWorkTypes.reportWorkTypeWorkers.worker.resourceRel',
             ])
                 ->where('site_id', $site->id)
                 ->whereDate('date', $date)
                 ->first()
             : null;
 
-        $tasks = $report ? $report->reportWorkTypes : collect();
+        $tasks = $report ? $this->workedTasks($report->reportWorkTypes) : collect();
 
         return response()->json([
             'site' => [
@@ -89,89 +98,148 @@ class DashboardController extends Controller
     }
 
     /**
-     * Heures normales / Heures sup. / Effectif pointé / Tâches achevées.
-     */
-        /**
-     * Base de prix / référentiel des temps unitaires (Cahier des charges V3 — § 2.5).
+     * Suivi historique d'un chantier (Cahier des charges V3 — § 2.3).
      *
-     * GET /api/dashboard/prices?work_id=2&from=2026-01-01&to=2026-09-30
+     * GET /api/dashboard/history?site_id=1&from=2026-07-10&to=2026-07-15
      *
-     * Toutes les tâches du catalogue (même jamais réalisées : 0 relevé),
-     * avec TU moyen / min / max calculés à partir des lignes de journal.
-     * Sans période : tout l'historique.
+     * Sans période : les 7 derniers jours jusqu'au dernier journal du chantier.
+     * Un point par jour ayant un journal (découpage à la journée).
      */
-    public function prices(Request $request)
+    public function history(Request $request)
     {
         if (!Gate::allows('view dashboard')) {
             return $this->errorMessage($this->moduleName, 403);
         }
 
         $request->validate([
-            'work_id' => ['nullable', 'exists:works,id'],
+            'site_id' => ['required', 'exists:sites,id'],
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date', 'after_or_equal:from'],
         ]);
 
-        $siteIds = $this->visibleSiteIds();
+        $site = Site::find($request->site_id);
 
-        // Catalogue : tâches globales + tâches propres aux chantiers visibles
-        $catalog = WorkType::with('work')
-            ->where(fn($query) => $query->whereNull('site_id')->orWhereIn('site_id', $siteIds))
-            ->when($request->filled('work_id'), fn($query) => $query->where('work_id', $request->work_id))
-            ->orderBy('name')
+        if (!$this->canViewSite($site)) {
+            return $this->errorMessage($this->moduleName, 403);
+        }
+
+        $lastReportDate = optional($site->reports()->latest('date')->first())->date;
+
+        $to = $request->filled('to')
+            ? Carbon::parse($request->to)
+            : Carbon::parse($lastReportDate ?? now());
+
+        $from = $request->filled('from')
+            ? Carbon::parse($request->from)
+            : $to->copy()->subDays(6);
+
+        $reports = Report::with([
+            'reportWorkTypes.workType.work',
+            'reportWorkTypes.reportWorkTypeWorkers',
+        ])
+            ->where('site_id', $site->id)
+            ->whereDate('date', '>=', $from->format('Y-m-d'))
+            ->whereDate('date', '<=', $to->format('Y-m-d'))
+            ->orderBy('date')
             ->get();
 
-        // Lignes de journal de la période (un relevé = une ligne avec heures et quantité)
-        $lines = ReportWorkType::with('reportWorkTypeWorkers')
-            ->whereIn('work_type_id', $catalog->pluck('id'))
-            ->whereHas('report', function ($query) use ($request, $siteIds) {
-                $query->whereIn('site_id', $siteIds)
-                    ->when($request->filled('from'), fn($q) => $q->whereDate('date', '>=', Carbon::parse($request->from)->format('Y-m-d')))
-                    ->when($request->filled('to'), fn($q) => $q->whereDate('date', '<=', Carbon::parse($request->to)->format('Y-m-d')));
-            })
-            ->get()
-            ->groupBy('work_type_id');
+        $days = $reports
+            ->map(fn($report) => Carbon::parse($report->date)->format('Y-m-d'))
+            ->unique()
+            ->values();
 
-        $rows = $catalog->map(function (WorkType $workType) use ($lines) {
-            // TU de chaque relevé (heures ÷ quantité), en ignorant les lignes incomplètes
-            $unitTimes = $lines->get($workType->id, collect())
-                ->map(fn(ReportWorkType $line) => $line->unitTime())
-                ->filter(fn($unitTime) => $unitTime !== null)
-                ->values();
+        // Toutes les lignes de tâches de la période, avec leur jour
+        $tasks = $reports->flatMap(function ($report) {
+            $day = Carbon::parse($report->date)->format('Y-m-d');
 
-            $average = $unitTimes->isNotEmpty() ? round($unitTimes->avg(), 2) : null;
-            $reference = $workType->t_u !== null ? (float) $workType->t_u : null;
-
-            return [
-                'id' => $workType->id,
-                'task' => $workType->name,
-                'category' => optional($workType->work)->name,
-                'unit' => optional($workType->work)->unit,
-                'average_unit_time' => $average,
-                'min_unit_time' => $unitTimes->isNotEmpty() ? round($unitTimes->min(), 2) : null,
-                'max_unit_time' => $unitTimes->isNotEmpty() ? round($unitTimes->max(), 2) : null,
-                'reference_unit_time' => $reference,
-                'status' => $this->taskStatus($average, $reference),
-                'readings' => $unitTimes->count(),
-            ];
-        })
-            // Par ordre de fiabilité décroissante (nombre de relevés), puis par nom
-            ->sortBy([['readings', 'desc'], ['task', 'asc']])
-            ->values()
-            ->all();
-
-        $categories = Work::where(fn($query) => $query->whereNull('site_id')->orWhereIn('site_id', $siteIds))
-            ->orderBy('name')
-            ->get(['id', 'name', 'unit']);
+            return $this->workedTasks($report->reportWorkTypes)->map(fn($task) => ['day' => $day, 'task' => $task]);
+        });
 
         return response()->json([
-            'from' => $request->filled('from') ? Carbon::parse($request->from)->format('Y-m-d') : null,
-            'to' => $request->filled('to') ? Carbon::parse($request->to)->format('Y-m-d') : null,
-            'categories' => $categories,
-            'rows' => $rows,
+            'site' => [
+                'id' => $site->id,
+                'name' => $site->name,
+            ],
+            'from' => $from->format('Y-m-d'),
+            'to' => $to->format('Y-m-d'),
+            'days' => $days->all(),
+            'quantity_by_unit' => $this->quantityByUnit($tasks, $days),
+            'hours_by_day' => $this->hoursByDay($tasks, $days),
+            'quantity_by_task' => $this->quantityByTask($tasks),
         ]);
     }
-        /**
+
+    /**
+     * Une série par unité (M2, ML, KG…) : quantité réalisée chaque jour.
+     * Seules les unités ayant au moins une valeur sur la période sont renvoyées.
+     */
+    private function quantityByUnit(Collection $tasks, Collection $days): array
+    {
+        return $tasks
+            ->groupBy(fn($row) => optional(optional($row['task']->workType)->work)->unit ?? '—')
+            ->map(function (Collection $rows, $unit) use ($days) {
+                $byDay = $rows->groupBy('day');
+
+                return [
+                    'unit' => $unit,
+                    // Catégories de travaux concernées, pour le titre : "M2 (maçonnerie et enduit)"
+                    'categories' => $rows
+                        ->map(fn($row) => $this->shortCategory(optional(optional($row['task']->workType)->work)->name))
+                        ->filter()
+                        ->unique()
+                        ->values()
+                        ->all(),
+                    'values' => $days->map(
+                        fn($day) => round($byDay->get($day, collect())->sum(fn($row) => $row['task']->quantity_completed ?? 0), 2)
+                    )->all(),
+                ];
+            })
+            ->filter(fn($serie) => array_sum($serie['values']) > 0)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Heures normales et heures sup. cumulées par jour.
+     */
+    private function hoursByDay(Collection $tasks, Collection $days): array
+    {
+        $byDay = $tasks->groupBy('day');
+
+        return $days->map(function ($day) use ($byDay) {
+            $workers = $byDay->get($day, collect())->flatMap(fn($row) => $row['task']->reportWorkTypeWorkers);
+
+            return [
+                'date' => $day,
+                'normal_hours' => round($workers->sum('normal_hours'), 2),
+                'overtime_hours' => round($workers->sum('overtime_hours'), 2),
+            ];
+        })->all();
+    }
+
+    /**
+     * Quantité totale par tâche sur la période (+ nombre de lignes de journal).
+     */
+    private function quantityByTask(Collection $tasks): array
+    {
+        return $tasks
+            ->groupBy(fn($row) => optional($row['task']->workType)->id)
+            ->map(function (Collection $rows) {
+                $workType = $rows->first()['task']->workType;
+
+                return [
+                    'task' => optional($workType)->name,
+                    'unit' => optional(optional($workType)->work)->unit,
+                    'quantity' => round($rows->sum(fn($row) => $row['task']->quantity_completed ?? 0), 2),
+                    'lines' => $rows->count(),
+                ];
+            })
+            ->sortByDesc('quantity')
+            ->values()
+            ->all();
+    }
+
+    /**
      * Comparatif multi-chantiers (Cahier des charges V3 — § 2.4).
      *
      * GET /api/dashboard/comparison?from=2026-07-07&to=2026-07-07&work_type_id=5
@@ -225,7 +293,7 @@ class DashboardController extends Controller
 
         // Une ligne par tâche de journal, avec son chantier
         $tasks = $reports->flatMap(
-            fn($report) => $report->reportWorkTypes->map(fn($task) => ['site_id' => $report->site_id, 'task' => $task])
+            fn($report) => $this->workedTasks($report->reportWorkTypes)->map(fn($task) => ['site_id' => $report->site_id, 'task' => $task])
         );
 
         $sharedTasks = $this->sharedTasks($tasks);
@@ -308,7 +376,7 @@ class DashboardController extends Controller
         $values = $sites
             ->map(fn($site) => [
                 'site' => $site->name,
-                'unit_time' => $this->aggregatedUnitTime($rows->where('site_id', $site->id)),
+                'unit_time' => $this->rounded($this->aggregatedUnitTime($rows->where('site_id', $site->id))),
             ])
             // Les chantiers n'ayant pas réalisé la tâche n'apparaissent pas
             ->filter(fn($row) => $row['unit_time'] !== null)
@@ -336,7 +404,7 @@ class DashboardController extends Controller
                 $workType = $rows->first()['task']->workType;
 
                 $unitTimes = $rows->groupBy('site_id')
-                    ->map(fn($siteRows) => $this->aggregatedUnitTime($siteRows))
+                    ->map(fn($siteRows) => $this->rounded($this->aggregatedUnitTime($siteRows)))
                     ->filter(fn($unitTime) => $unitTime !== null);
 
                 return [
@@ -353,15 +421,14 @@ class DashboardController extends Controller
     }
 
     /**
-     * TU sur une période = total des heures ÷ total des quantités.
+     * TU sur une période = total des heures ÷ total des quantités (valeur exacte, non arrondie).
      */
     private function aggregatedUnitTime(Collection $rows): ?float
     {
-        $hours = $rows->sum(fn($row) => $row['task']->reportWorkTypeWorkers->sum('normal_hours')
-            + $row['task']->reportWorkTypeWorkers->sum('overtime_hours'));
+        $hours = $rows->sum(fn($row) => $this->taskHours($row['task']));
         $quantity = $rows->sum(fn($row) => $row['task']->quantity_completed ?? 0);
 
-        return ($hours > 0 && $quantity > 0) ? round($hours / $quantity, 2) : null;
+        return ($hours > 0 && $quantity > 0) ? $hours / $quantity : null;
     }
 
     /**
@@ -386,140 +453,98 @@ class DashboardController extends Controller
 
         return [];
     }
-        /**
-     * Suivi historique d'un chantier (Cahier des charges V3 — § 2.3).
+
+    /**
+     * Base de prix / référentiel des temps unitaires (Cahier des charges V3 — § 2.5).
      *
-     * GET /api/dashboard/history?site_id=1&from=2026-07-10&to=2026-07-15
+     * GET /api/dashboard/prices?work_id=2&from=2026-01-01&to=2026-09-30
      *
-     * Sans période : les 7 derniers jours jusqu'au dernier journal du chantier.
-     * Un point par jour ayant un journal (découpage à la journée).
+     * Toutes les tâches du catalogue (même jamais réalisées : 0 relevé),
+     * avec TU moyen / min / max calculés à partir des lignes de journal.
+     * Sans période : tout l'historique.
      */
-    public function history(Request $request)
+    public function prices(Request $request)
     {
         if (!Gate::allows('view dashboard')) {
             return $this->errorMessage($this->moduleName, 403);
         }
 
         $request->validate([
-            'site_id' => ['required', 'exists:sites,id'],
+            'work_id' => ['nullable', 'exists:works,id'],
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date', 'after_or_equal:from'],
         ]);
 
-        $site = Site::find($request->site_id);
+        $siteIds = $this->visibleSiteIds();
 
-        if (!$this->canViewSite($site)) {
-            return $this->errorMessage($this->moduleName, 403);
-        }
-
-        $lastReportDate = optional($site->reports()->latest('date')->first())->date;
-
-        $to = $request->filled('to')
-            ? Carbon::parse($request->to)
-            : Carbon::parse($lastReportDate ?? now());
-
-        $from = $request->filled('from')
-            ? Carbon::parse($request->from)
-            : $to->copy()->subDays(6);
-
-        $reports = Report::with([
-            'reportWorkTypes.workType.work',
-            'reportWorkTypes.reportWorkTypeWorkers',
-        ])
-            ->where('site_id', $site->id)
-            ->whereDate('date', '>=', $from->format('Y-m-d'))
-            ->whereDate('date', '<=', $to->format('Y-m-d'))
-            ->orderBy('date')
+        // Catalogue : tâches globales + tâches propres aux chantiers visibles
+        $catalog = WorkType::with('work')
+            ->where(fn($query) => $query->whereNull('site_id')->orWhereIn('site_id', $siteIds))
+            ->when($request->filled('work_id'), fn($query) => $query->where('work_id', $request->work_id))
+            ->orderBy('name')
             ->get();
 
-        $days = $reports
-            ->map(fn($report) => Carbon::parse($report->date)->format('Y-m-d'))
-            ->unique()
-            ->values();
+        // Lignes de journal de la période (un relevé = une ligne avec heures et quantité)
+        $lines = ReportWorkType::with('reportWorkTypeWorkers')
+            ->whereIn('work_type_id', $catalog->pluck('id'))
+            ->whereHas('report', function ($query) use ($request, $siteIds) {
+                $query->whereIn('site_id', $siteIds)
+                    ->when($request->filled('from'), fn($q) => $q->whereDate('date', '>=', Carbon::parse($request->from)->format('Y-m-d')))
+                    ->when($request->filled('to'), fn($q) => $q->whereDate('date', '<=', Carbon::parse($request->to)->format('Y-m-d')));
+            })
+            ->get()
+            ->groupBy('work_type_id');
 
-        // Toutes les lignes de tâches de la période, avec leur jour
-        $tasks = $reports->flatMap(function ($report) {
-            $day = Carbon::parse($report->date)->format('Y-m-d');
+        $rows = $catalog->map(function (WorkType $workType) use ($lines) {
+            // TU exact de chaque relevé (heures ÷ quantité), en ignorant les lignes incomplètes
+            $unitTimes = $this->workedTasks($lines->get($workType->id, collect()))
+                ->map(fn(ReportWorkType $line) => $this->unitTime($line))
+                ->filter(fn($unitTime) => $unitTime !== null)
+                ->values();
 
-            return $report->reportWorkTypes->map(fn($task) => ['day' => $day, 'task' => $task]);
-        });
+            // On arrondit seulement le résultat final (et non chaque relevé)
+            $average = $unitTimes->isNotEmpty() ? $unitTimes->avg() : null;
+            $reference = $workType->t_u !== null ? (float) $workType->t_u : null;
+
+            return [
+                'id' => $workType->id,
+                'task' => $workType->name,
+                'category' => optional($workType->work)->name,
+                'unit' => optional($workType->work)->unit,
+                'average_unit_time' => $this->rounded($average),
+                'min_unit_time' => $this->rounded($unitTimes->min()),
+                'max_unit_time' => $this->rounded($unitTimes->max()),
+                'reference_unit_time' => $reference,
+                'status' => $this->taskStatus($average, $reference),
+                'readings' => $unitTimes->count(),
+            ];
+        })
+            // Par ordre de fiabilité décroissante (nombre de relevés), puis par nom
+            ->sort(function ($a, $b) {
+                if ($a['readings'] === $b['readings']) {
+                    return strcmp($a['task'], $b['task']);
+                }
+
+                return $b['readings'] <=> $a['readings'];
+            })
+            ->values()
+            ->all();
+
+        $categories = Work::where(fn($query) => $query->whereNull('site_id')->orWhereIn('site_id', $siteIds))
+            ->orderBy('name')
+            ->get(['id', 'name', 'unit']);
 
         return response()->json([
-            'site' => [
-                'id' => $site->id,
-                'name' => $site->name,
-            ],
-            'from' => $from->format('Y-m-d'),
-            'to' => $to->format('Y-m-d'),
-            'days' => $days->all(),
-            'quantity_by_unit' => $this->quantityByUnit($tasks, $days),
-            'hours_by_day' => $this->hoursByDay($tasks, $days),
-            'quantity_by_task' => $this->quantityByTask($tasks),
+            'from' => $request->filled('from') ? Carbon::parse($request->from)->format('Y-m-d') : null,
+            'to' => $request->filled('to') ? Carbon::parse($request->to)->format('Y-m-d') : null,
+            'categories' => $categories,
+            'rows' => $rows,
         ]);
     }
 
     /**
-     * Une série par unité (M2, ML, KG…) : quantité réalisée chaque jour.
-     * Seules les unités ayant au moins une valeur sur la période sont renvoyées.
+     * Heures normales / Heures sup. / Effectif pointé / Tâches achevées.
      */
-    private function quantityByUnit(Collection $tasks, Collection $days): array
-    {
-        return $tasks
-            ->groupBy(fn($row) => optional(optional($row['task']->workType)->work)->unit ?? '—')
-            ->map(function (Collection $rows, $unit) use ($days) {
-                $byDay = $rows->groupBy('day');
-
-                return [
-                    'unit' => $unit,
-                    'values' => $days->map(
-                        fn($day) => round($byDay->get($day, collect())->sum(fn($row) => $row['task']->quantity_completed ?? 0), 2)
-                    )->all(),
-                ];
-            })
-            ->filter(fn($serie) => array_sum($serie['values']) > 0)
-            ->values()
-            ->all();
-    }
-
-    /**
-     * Heures normales et heures sup. cumulées par jour.
-     */
-    private function hoursByDay(Collection $tasks, Collection $days): array
-    {
-        $byDay = $tasks->groupBy('day');
-
-        return $days->map(function ($day) use ($byDay) {
-            $workers = $byDay->get($day, collect())->flatMap(fn($row) => $row['task']->reportWorkTypeWorkers);
-
-            return [
-                'date' => $day,
-                'normal_hours' => round($workers->sum('normal_hours'), 2),
-                'overtime_hours' => round($workers->sum('overtime_hours'), 2),
-            ];
-        })->all();
-    }
-
-    /**
-     * Quantité totale par tâche sur la période (+ nombre de lignes de journal).
-     */
-    private function quantityByTask(Collection $tasks): array
-    {
-        return $tasks
-            ->groupBy(fn($row) => optional($row['task']->workType)->id)
-            ->map(function (Collection $rows) {
-                $workType = $rows->first()['task']->workType;
-
-                return [
-                    'task' => optional($workType)->name,
-                    'unit' => optional(optional($workType)->work)->unit,
-                    'quantity' => round($rows->sum(fn($row) => $row['task']->quantity_completed ?? 0), 2),
-                    'lines' => $rows->count(),
-                ];
-            })
-            ->sortByDesc('quantity')
-            ->values()
-            ->all();
-    }
     private function indicators(Collection $tasks): array
     {
         $workers = $tasks->flatMap->reportWorkTypeWorkers;
@@ -549,8 +574,8 @@ class DashboardController extends Controller
 
                 return [
                     'category' => $category,
-                    'qualified' => $workers->filter(fn($rww) => $this->hasContract($rww->worker, self::QUALIFIED_CONTRACTS))->count(),
-                    'labour' => $workers->filter(fn($rww) => $this->hasContract($rww->worker, self::LABOUR_CONTRACTS))->count(),
+                    'qualified' => $workers->filter(fn($rww) => $this->workerGroup($rww->worker) === 'qualified')->count(),
+                    'labour' => $workers->filter(fn($rww) => $this->workerGroup($rww->worker) === 'labour')->count(),
                 ];
             })
             ->sortByDesc(fn($row) => $row['qualified'] + $row['labour'])
@@ -565,7 +590,8 @@ class DashboardController extends Controller
     {
         return $tasks
             ->map(function (ReportWorkType $task) {
-                $unitTime = $task->unitTime();
+                $unitTime = $this->unitTime($task);
+                $hours = $this->taskHours($task);
                 $referenceUnitTime = optional($task->workType)->t_u !== null
                     ? (float) $task->workType->t_u
                     : null;
@@ -577,9 +603,13 @@ class DashboardController extends Controller
                     'unit' => optional(optional($task->workType)->work)->unit,
                     'quantity' => $task->quantity_completed,
                     'stat_work' => $task->stat_work,
-                    'unit_time' => $unitTime,
+                    'unit_time' => $this->rounded($unitTime),
                     'reference_unit_time' => $referenceUnitTime,
-                    'performance' => $task->rendement(),
+                    // Rendement = quantité ÷ heures (unités par heure)
+                    'performance' => ($hours > 0 && $task->quantity_completed > 0)
+                        ? round($task->quantity_completed / $hours, 2)
+                        : null,
+                    // Comparaison sur la valeur exacte (et non la valeur arrondie affichée)
                     'status' => $this->taskStatus($unitTime, $referenceUnitTime),
                 ];
             })
@@ -602,9 +632,66 @@ class DashboardController extends Controller
         return $unitTime > $referenceUnitTime ? 'above' : 'ok';
     }
 
-    private function hasContract($worker, array $contracts): bool
+    /**
+     * Tâches réellement travaillées : on écarte les copies créées automatiquement
+     * par le report des tâches inachevées (is_reported) sur lesquelles aucun ouvrier
+     * n'a été affecté ce jour-là. Sinon leur quantité serait comptée deux fois (§ 2.6.1).
+     */
+    private function workedTasks(Collection $tasks): Collection
     {
-        return in_array(strtoupper($worker->contract_type ?? ''), $contracts, true);
+        return $tasks
+            ->reject(fn(ReportWorkType $task) => $task->is_reported && $task->reportWorkTypeWorkers->isEmpty())
+            ->values();
+    }
+
+    /**
+     * Heures d'une tâche = heures normales + heures sup. de tous ses ouvriers.
+     */
+    private function taskHours(ReportWorkType $task): float
+    {
+        return (float) $task->reportWorkTypeWorkers->sum('normal_hours')
+            + (float) $task->reportWorkTypeWorkers->sum('overtime_hours');
+    }
+
+    /**
+     * TU exact d'une ligne de journal = heures ÷ quantité (null si incomplet).
+     */
+    private function unitTime(ReportWorkType $task): ?float
+    {
+        $hours = $this->taskHours($task);
+
+        return ($hours > 0 && $task->quantity_completed > 0) ? $hours / $task->quantity_completed : null;
+    }
+
+    private function rounded(?float $value): ?float
+    {
+        return $value === null ? null : round($value, 2);
+    }
+
+    /**
+     * "qualified", "labour" ou null (main-d'oeuvre indirecte ou qualification inconnue).
+     */
+    private function workerGroup($worker): ?string
+    {
+        $qualification = Str::lower(Str::ascii(trim(optional(optional($worker)->resourceRel)->name ?? '')));
+
+        if (in_array($qualification, self::LABOUR_QUALIFICATIONS, true)) {
+            return 'labour';
+        }
+
+        if (in_array($qualification, self::QUALIFIED_QUALIFICATIONS, true)) {
+            return 'qualified';
+        }
+
+        return null;
+    }
+
+    /**
+     * "Travaux de maconnerie et enduit" → "maconnerie et enduit" (titres des mini-courbes).
+     */
+    private function shortCategory(?string $name): ?string
+    {
+        return $name ? Str::lower(preg_replace("/^travaux\s+(de\s+|d')/i", '', trim($name))) : null;
     }
 
     /**
