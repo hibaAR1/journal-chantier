@@ -257,11 +257,12 @@ class DashboardController extends Controller
         $request->validate([
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date', 'after_or_equal:from'],
-            'work_type_id' => ['nullable', 'exists:work_types,id'],
+                 'work_type_id' => ['nullable', 'exists:work_types,id'],
+            'site_ids' => ['nullable', 'array'],
+            'site_ids.*' => ['integer'],
         ]);
 
         $siteIds = $this->visibleSiteIds();
-
         $lastReportDate = $this->lastWorkedDate($siteIds);
 
         $to = $request->filled('to')
@@ -283,13 +284,21 @@ class DashboardController extends Controller
             ->whereDate('date', '<=', $to->format('Y-m-d'))
             ->get();
 
-        // Chantiers actifs = chantiers ayant au moins un journal sur la période
-        $sites = $reports
+               // Chantiers actifs = chantiers ayant au moins un journal sur la période
+        $activeSites = $reports
             ->map(fn($report) => $report->site)
             ->filter()
             ->unique('id')
             ->sortBy('name')
             ->values();
+
+        // Chantiers choisis dans le sélecteur (parmi les chantiers actifs) ; aucun choix = tous
+        $selectedIds = collect($request->input('site_ids', []))->map(fn($id) => (int) $id);
+        $sites = $selectedIds->isEmpty()
+            ? $activeSites
+            : $activeSites->filter(fn($site) => $selectedIds->contains($site->id))->values();
+
+        $reports = $reports->whereIn('site_id', $sites->pluck('id'))->values();
 
         // Une ligne par tâche de journal, avec son chantier
         $tasks = $reports->flatMap(
@@ -309,6 +318,12 @@ class DashboardController extends Controller
         return response()->json([
             'from' => $from->format('Y-m-d'),
             'to' => $to->format('Y-m-d'),
+                       // Tous les chantiers actifs sur la période (options du sélecteur)
+            'active_sites' => $activeSites->map(fn($site) => ['id' => $site->id, 'name' => $site->name])->all(),
+            // Chantiers réellement comparés
+                      // Tous les chantiers actifs sur la période (options du sélecteur)
+            'active_sites' => $activeSites->map(fn($site) => ['id' => $site->id, 'name' => $site->name])->all(),
+            // Chantiers réellement comparés
             'sites' => $sites->map(fn($site) => ['id' => $site->id, 'name' => $site->name])->all(),
             'sites_hours' => $this->sitesHours($reports, $sites),
             'tasks' => $periodTasks,

@@ -112,7 +112,8 @@ export const DashboardProvider = ({ children }) => {
   };
 
   // filters = { from, to, workTypeId } — dates au format "yyyy-MM-dd" (optionnelles)
-  const getComparison = async ({ from, to, workTypeId } = {}) => {
+  // siteIds = chantiers choisis dans le sélecteur (vide = tous les chantiers actifs)
+  const getComparison = async ({ from, to, workTypeId, siteIds } = {}) => {
     setComparisonLoading(true);
     setComparisonError(null);
 
@@ -120,6 +121,7 @@ export const DashboardProvider = ({ children }) => {
       from: from || undefined,
       to: to || undefined,
       work_type_id: workTypeId || undefined,
+      site_ids: siteIds?.length ? siteIds : undefined,
     })
       .then(({ data }) => setComparison(data))
       .catch(({ response }) => {

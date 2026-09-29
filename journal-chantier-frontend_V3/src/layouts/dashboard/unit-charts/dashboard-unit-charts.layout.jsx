@@ -7,7 +7,7 @@ import {
   PointElement,
   Tooltip,
 } from "chart.js";
-import { format, parseISO } from "date-fns";
+
 
 ChartJS.register(
   CategoryScale,
@@ -31,7 +31,7 @@ const COLORS = [
  * "Quantité réalisée par jour, par unité" : une mini-courbe par unité (M2, ML, KG…),
  * car les échelles sont trop différentes pour partager un même axe.
  */
-const DashboardUnitChartsLayout = ({ days = [], series = [] }) => {
+const DashboardUnitChartsLayout = ({ labels = [], series = [] }) => {
   if (series.length === 0) {
     return (
       <p className="text-sm text-secondary-500 py-6">
@@ -40,7 +40,7 @@ const DashboardUnitChartsLayout = ({ days = [], series = [] }) => {
     );
   }
 
-  const labels = days.map((day) => format(parseISO(day), "dd/MM"));
+
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

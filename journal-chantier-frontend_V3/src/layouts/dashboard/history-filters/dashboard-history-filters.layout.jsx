@@ -21,22 +21,31 @@ import {
 
 import { cn } from "../../../lib/utils.js";
 
+// Sélecteur "Période : Jour ▾" (cahier des charges § 2.3) :
+// "Période par défaut en jour (pas de découpage hebdo/mensuel imposé)".
+export const GROUP_TYPES = [{ value: "day", label: "Jour" }];
+
 /**
- * Filtres du suivi historique : chantier + période (plage de dates).
- * period = { from: Date, to: Date }
+ * Filtres du suivi historique : chantier + "Période : Jour ▾" + plage de dates.
+ * period = { from: Date, to: Date } — groupBy = "day" | "week" | "month"
  */
 const DashboardHistoryFiltersLayout = ({
   sites,
   siteId,
   period,
+  groupBy,
   onSiteChange,
+  onGroupByChange,
   onPeriodChange,
 }) => {
   const selectedSite = sites.find((site) => site.value === siteId);
 
   // Les listes se referment dès qu'un choix est fait
   const [siteOpen, setSiteOpen] = useState(false);
+  const [groupOpen, setGroupOpen] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
+
+  const groupLabel = GROUP_TYPES.find((type) => type.value === groupBy)?.label;
 
   const periodLabel = period?.from
     ? `Du ${format(period.from, "dd/MM/yyyy")} au ${format(period.to ?? period.from, "dd/MM/yyyy")}`
@@ -87,6 +96,45 @@ const DashboardHistoryFiltersLayout = ({
       </Popover>
 
       {/* Sélecteur période (du … au …) */}
+      {/* Sélecteur "Période : Jour ▾" */}
+      <Popover open={groupOpen} onOpenChange={setGroupOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="primaryControl"
+            role="combobox"
+            className="w-auto min-w-[170px] justify-between"
+          >
+            Période : {groupLabel}
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[200px] p-0">
+          <Command>
+            <CommandList>
+              <CommandGroup>
+                {GROUP_TYPES.map((type) => (
+                  <CommandItem
+                    key={type.value}
+                    value={type.label}
+                    onSelect={() => {
+                      onGroupByChange(type.value);
+                      setGroupOpen(false);
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        type.value === groupBy ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    {type.label}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
       <Popover open={dateOpen} onOpenChange={setDateOpen}>
         <PopoverTrigger asChild>
           <Button variant="primaryControl" className="w-auto min-w-[240px]">

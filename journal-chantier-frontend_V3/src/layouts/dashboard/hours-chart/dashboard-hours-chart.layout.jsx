@@ -7,7 +7,6 @@ import {
   LinearScale,
   Tooltip,
 } from "chart.js";
-import { format, parseISO } from "date-fns";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 
@@ -25,7 +24,7 @@ const DashboardHoursChartLayout = ({ rows = [] }) => {
   }
 
   const data = {
-    labels: rows.map((row) => format(parseISO(row.date), "dd/MM")),
+    labels: rows.map((row) => row.label),
     datasets: [
       {
         label: "H.N",
