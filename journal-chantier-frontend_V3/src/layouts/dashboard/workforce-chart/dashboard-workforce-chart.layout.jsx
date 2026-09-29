@@ -10,9 +10,10 @@ import {
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 
+// Couleurs du cahier des charges
 const COLORS = {
-  qualified: "#C94D25", // primary-600
-  labour: "#e8ae89", // primary-300
+  qualified: "#2A63A8", // bleu
+  labour: "#E08A2E", // orange
 };
 
 /**

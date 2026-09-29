@@ -60,13 +60,13 @@ const DashboardSitesHoursChartLayout = ({ rows = [] }) => {
       {
         label: "H.N",
         data: rows.map((row) => row.normal_hours),
-        backgroundColor: "#C94D25",
+        backgroundColor: "#2A63A8",
         maxBarThickness: 48,
       },
       {
         label: "H.S",
         data: rows.map((row) => row.overtime_hours),
-        backgroundColor: "#6c2c22",
+        backgroundColor: "#C04B3F",
         maxBarThickness: 48,
       },
     ],

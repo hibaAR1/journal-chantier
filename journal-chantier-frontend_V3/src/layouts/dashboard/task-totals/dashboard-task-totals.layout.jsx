@@ -39,7 +39,7 @@ const DashboardTaskTotalsLayout = ({ rows = [] }) => {
       {
         label: "Quantité totale",
         data: rows.map((row) => row.quantity),
-        backgroundColor: "#C94D25",
+        backgroundColor: "#2A63A8",
         maxBarThickness: 24,
       },
     ],

@@ -8,7 +8,6 @@ import {
   Tooltip,
 } from "chart.js";
 
-
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -18,14 +17,20 @@ ChartJS.register(
 );
 
 // Une couleur par mini-courbe (reprend la palette de l'application)
-const COLORS = [
-  "#C94D25",
-  "#6c2c22",
-  "#de8559",
-  "#853327",
-  "#e8ae89",
-  "#a63e28",
-];
+// Couleurs du cahier des charges : une couleur fixe par unité
+const UNIT_COLORS = {
+  M2: "#2A63A8", // bleu
+  ML: "#E08A2E", // orange
+  KG: "#4F8A3C", // vert
+  M3: "#C04B3F", // rouge
+};
+
+// Pour les autres unités (Forfait, U…)
+const OTHER_COLORS = ["#8A887F", "#1C3A5D", "#7794C0"];
+
+const colorOf = (unit, index) =>
+  UNIT_COLORS[String(unit).toUpperCase()] ??
+  OTHER_COLORS[index % OTHER_COLORS.length];
 
 /**
  * "Quantité réalisée par jour, par unité" : une mini-courbe par unité (M2, ML, KG…),
@@ -39,8 +44,6 @@ const DashboardUnitChartsLayout = ({ labels = [], series = [] }) => {
       </p>
     );
   }
-
-
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -66,8 +69,8 @@ const DashboardUnitChartsLayout = ({ labels = [], series = [] }) => {
                   {
                     label: serie.unit,
                     data: serie.values,
-                    borderColor: COLORS[index % COLORS.length],
-                    backgroundColor: COLORS[index % COLORS.length],
+                    borderColor: colorOf(serie.unit, index),
+                    backgroundColor: colorOf(serie.unit, index),
                     borderWidth: 2,
                     pointRadius: 3,
                   },

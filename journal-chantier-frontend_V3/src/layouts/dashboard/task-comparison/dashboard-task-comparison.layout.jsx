@@ -28,7 +28,7 @@ const DashboardTaskComparisonLayout = ({ comparison }) => {
     {
       label: "TU réel",
       data: comparison.values.map((row) => row.unit_time),
-      backgroundColor: "#C94D25",
+      backgroundColor: "#2A63A8",
       maxBarThickness: 40,
     },
   ];
@@ -37,7 +37,7 @@ const DashboardTaskComparisonLayout = ({ comparison }) => {
     datasets.push({
       label: "TU réf.",
       data: comparison.values.map(() => comparison.reference_unit_time),
-      backgroundColor: "#aeb2b2",
+      backgroundColor: "#8A887F",
       maxBarThickness: 40,
     });
   }
