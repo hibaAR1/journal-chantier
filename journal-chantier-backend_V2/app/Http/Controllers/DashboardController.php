@@ -65,7 +65,7 @@ class DashboardController extends Controller
 
         $date = $request->filled('date')
             ? Carbon::parse($request->date)->format('Y-m-d')
-            : optional($site->reports()->latest('date')->first())->date;
+                        : $this->lastWorkedDate([$site->id]);
 
         $report = $date
             ? Report::with([
@@ -123,7 +123,7 @@ class DashboardController extends Controller
             return $this->errorMessage($this->moduleName, 403);
         }
 
-        $lastReportDate = optional($site->reports()->latest('date')->first())->date;
+              $lastReportDate = $this->lastWorkedDate([$site->id]);
 
         $to = $request->filled('to')
             ? Carbon::parse($request->to)
@@ -261,9 +261,7 @@ class DashboardController extends Controller
 
         $siteIds = $this->visibleSiteIds();
 
-        $lastReportDate = optional(
-            Report::whereIn('site_id', $siteIds)->latest('date')->first()
-        )->date;
+               $lastReportDate = $this->lastWorkedDate($siteIds);
 
         $to = $request->filled('to')
             ? Carbon::parse($request->to)
@@ -296,19 +294,21 @@ class DashboardController extends Controller
             fn($report) => $this->workedTasks($report->reportWorkTypes)->map(fn($task) => ['site_id' => $report->site_id, 'task' => $task])
         );
 
-        $sharedTasks = $this->sharedTasks($tasks);
+                $sharedTasks = $this->sharedTasks($tasks);
+        $periodTasks = $this->periodTasks($tasks);
 
-        // Tâche comparée : celle demandée, sinon la tâche partagée par le plus de chantiers
-        $workTypeId = $request->filled('work_type_id')
-            ? (int) $request->work_type_id
-            : optional(collect($sharedTasks)->first())['work_type_id'];
-
+        // Tâche comparée : celle demandée (si elle a été réalisée sur la période),
+        // sinon la tâche partagée par le plus de chantiers, sinon la première tâche de la période
+        $requested = $request->filled('work_type_id') ? (int) $request->work_type_id : null;
+        $workTypeId = collect($periodTasks)->contains('id', $requested)
+            ? $requested
+            : (collect($sharedTasks)->first()['work_type_id'] ?? collect($periodTasks)->first()['id'] ?? null);
         return response()->json([
             'from' => $from->format('Y-m-d'),
             'to' => $to->format('Y-m-d'),
             'sites' => $sites->map(fn($site) => ['id' => $site->id, 'name' => $site->name])->all(),
             'sites_hours' => $this->sitesHours($reports, $sites),
-            'tasks' => $this->periodTasks($tasks),
+                       'tasks' => $periodTasks,
             'task_comparison' => $this->taskComparison($tasks, $sites, $workTypeId),
             'multi_tasks' => $sharedTasks,
         ]);
@@ -434,6 +434,22 @@ class DashboardController extends Controller
     /**
      * Identifiants des chantiers visibles par l'utilisateur (même règle que les journaux).
      */
+        /**
+     * Date du dernier journal contenant du travail saisi (au moins un ouvrier sur une tâche),
+     * pour les périodes par défaut : on évite d'ouvrir le tableau de bord sur un journal vide.
+     * S'il n'y en a aucun, on prend le dernier journal tout court.
+     */
+    private function lastWorkedDate(array $siteIds): ?string
+    {
+        $lastWorked = Report::whereIn('site_id', $siteIds)
+            ->whereHas('reportWorkTypes.reportWorkTypeWorkers')
+            ->latest('date')
+            ->first();
+
+        $report = $lastWorked ?? Report::whereIn('site_id', $siteIds)->latest('date')->first();
+
+        return $report ? Carbon::parse($report->date)->format('Y-m-d') : null;
+    }
     private function visibleSiteIds(): array
     {
         if (Gate::allows('view all reports')) {

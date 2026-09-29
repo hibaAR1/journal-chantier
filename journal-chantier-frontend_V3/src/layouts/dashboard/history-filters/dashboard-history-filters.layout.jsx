@@ -99,10 +99,19 @@ const DashboardHistoryFiltersLayout = ({
             locale={fr}
             numberOfMonths={2}
             selected={period}
-            onSelect={(value) => {
-              onPeriodChange(value);
+            onSelect={(value, clickedDay) => {
+              // Si une période complète est déjà affichée, un nouveau clic
+              // commence une NOUVELLE période (1er clic = début, 2e clic = fin).
+              // Cliquer 2 fois sur le même jour = une seule journée.
+              const next =
+                period?.from && period?.to
+                  ? { from: clickedDay, to: undefined }
+                  : value;
+
+              onPeriodChange(next);
+
               // On referme quand la période est complète (du … au …)
-              if (value?.from && value?.to) setDateOpen(false);
+              if (next?.from && next?.to) setDateOpen(false);
             }}
             disabled={(day) => day > new Date()}
             initialFocus
