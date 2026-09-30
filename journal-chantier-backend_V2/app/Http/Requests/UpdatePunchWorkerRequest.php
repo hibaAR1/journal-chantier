@@ -41,7 +41,8 @@ class UpdatePunchWorkerRequest extends FormRequest
             $punchId = $this->punch_id;
             $workerId = $this->worker_id;
 
-            $currentId = $this->route('id'); // important
+     // Id de la ligne modifiée : la route est /punch-worker/{punch_worker}
+            $currentId = $this->route('punch_worker');// important
 
             $punch = Punch::find($punchId);
 

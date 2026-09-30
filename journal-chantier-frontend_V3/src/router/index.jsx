@@ -17,6 +17,7 @@ import LocationsPage from "../pages/locations/locations.page.jsx";
 import MovementsPage from "../pages/movements/movements.page.jsx";
 import WorkersPage from "../pages/workers/workers.page.jsx";
 import PunchesPage from "../pages/punches/punches.page.jsx";
+import PunchSummaryPage from "../pages/punch-summary/punch-summary.page.jsx";
 import ReportsPage from "../pages/reports/reports.page.jsx";
 import ReportWorkTypesPage from "../pages/report-work-types/report-work-types.page.jsx";
 import ReportWorkTypeWorkersPage from "../pages/report-work-type-workers/report-work-type-workers.page.jsx";
@@ -95,6 +96,11 @@ export const router = createBrowserRouter([
         name: "assignments",
       },
       { path: "/punches", element: <PunchesPage />, name: "punches" },
+      {
+        path: "/punch-summary",
+        element: <PunchSummaryPage />,
+        name: "punch-summary",
+      },
       {
         path: "/punch-workers/:punchId",
         element: <PunchWorkersPage />,

@@ -49,6 +49,11 @@
     "name": "punches",
     "permission": "view punches"
   },
+    {
+    "title": "État récapitulatif",
+    "name": "punch-summary",
+    "permission": "view punches"
+  },
   {
     "title": "Journaux",
     "name": "reports",

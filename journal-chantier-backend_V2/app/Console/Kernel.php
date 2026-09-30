@@ -14,6 +14,11 @@ class Kernel extends ConsoleKernel
     {
         $schedule->command('autovalidate:punch-report')->dailyAt('00:00');
 
+        // État Récapitulatif Journalier de Pointage envoyé par e-mail chaque jour (CDC V3 § 3.1.5)
+        // Heure réglable dans le .env : PUNCH_SUMMARY_SEND_TIME="11:00"
+        $schedule->command('punch-summary:send')
+            ->dailyAt(config('punch_summary.send_time'));
+
     }
 
     /**

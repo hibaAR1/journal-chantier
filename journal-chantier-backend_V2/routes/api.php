@@ -100,5 +100,8 @@ Route::middleware(['check.token.expiration', 'auth:sanctum'])->group(function ()
     Route::get('/dashboard/history', [\App\Http\Controllers\DashboardController::class, 'history']);
         Route::get('/dashboard/comparison', [\App\Http\Controllers\DashboardController::class, 'comparison']);
        Route::get('/dashboard/prices', [\App\Http\Controllers\DashboardController::class, 'prices']);
-        });
+
+    // État Récapitulatif Journalier de Pointage (cahier des charges V3 — § 3.1)
+    Route::get('/punch-summary', [\App\Http\Controllers\PunchSummaryController::class, 'index']);
+       });
 

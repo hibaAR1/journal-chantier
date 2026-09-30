@@ -4,6 +4,8 @@ namespace Database\Seeders;
 
 use App\Models\Client;
 use App\Models\Location;
+use App\Models\Punch;
+use App\Models\PunchWorker;
 use App\Models\Report;
 use App\Models\ReportWorkType;
 use App\Models\ReportWorkTypeWorker;
@@ -88,7 +90,32 @@ class DashboardTestSeeder extends Seeder
             [$coff, 4, 100, [[$w['nabil'], 8, 0]]],
         ]);
 
-        $this->command?->info('Données de test du tableau de bord créées (hiba, Villa Test, Symphonie — du 26 au 28/09/2026).');
+              // Pointages du 28/09 pour l'État Récapitulatif Journalier (§ 3.1) : MOD + MOI (encadrement)
+        $w['rachid'] = $this->worker('Rachid', 'T008', 'CDI', 'Chef chantier');
+        $w['hassan'] = $this->worker('Hassan', 'T009', 'CDI', 'Magasinier');
+        $w['driss'] = $this->worker('Driss', 'T010', 'CDI', 'Caporal');
+
+        // [ouvrier, type, HN, HS] — type 1 = Service normal, 5 = Absent autorisé (non compté)
+        $this->punch($hiba, '2026-09-28', [
+            [$w['rachid'], 1, 8, 0],
+            [$w['ali'], 1, 8, 2],
+            [$w['karim'], 1, 8, 2],
+            [$w['omar'], 1, 8, 0],
+            [$w['hassan'], 1, 8, 0],
+            [$w['youssef'], 5, 0, 0],
+        ]);
+
+        $this->punch($villa, '2026-09-28', [
+            [$w['samir'], 1, 8, 0],
+            [$w['hamza'], 1, 8, 1],
+            [$w['driss'], 1, 8, 0],
+        ]);
+
+        $this->punch($symphonie, '2026-09-28', [
+            [$w['nabil'], 1, 8, 0],
+        ]);
+
+        $this->command?->info('Données de test du tableau de bord créées (hiba, Villa Test, Symphonie — du 26 au 28/09/2026, + pointages du 28/09).');
     }
 
     private function site(string $name, Client $client, User $user): Site
@@ -166,6 +193,25 @@ class DashboardTestSeeder extends Seeder
                     'overtime_hours' => $overtimeHours,
                 ]);
             }
+        }
+    }
+
+    private function punch(Site $site, string $date, array $workers): void
+    {
+        $punch = Punch::where('site_id', $site->id)->whereDate('date', $date)->first()
+            ?? Punch::create(['site_id' => $site->id, 'date' => $date]);
+
+        // On repart d'un pointage vide pour obtenir toujours les mêmes chiffres
+        $punch->punchWorkers()->forceDelete();
+
+        foreach ($workers as [$worker, $type, $normalHours, $overtimeHours]) {
+            PunchWorker::create([
+                'punch_id' => $punch->id,
+                'worker_id' => $worker->id,
+                'type' => $type,
+                'natural_hours' => $normalHours,
+                'overtime_hours' => $overtimeHours,
+            ]);
         }
     }
 }

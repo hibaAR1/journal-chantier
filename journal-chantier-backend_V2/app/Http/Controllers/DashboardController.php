@@ -48,7 +48,7 @@ class DashboardController extends Controller
      */
     public function daily(Request $request)
     {
-        if (!Gate::allows('view dashboard')) {
+	if (!Gate::allows('view dashboard daily')) {
             return $this->errorMessage($this->moduleName, 403);
         }
 
@@ -107,7 +107,7 @@ class DashboardController extends Controller
      */
     public function history(Request $request)
     {
-        if (!Gate::allows('view dashboard')) {
+        if (!Gate::allows('view dashboard history')) {
             return $this->errorMessage($this->moduleName, 403);
         }
 
@@ -250,7 +250,7 @@ class DashboardController extends Controller
      */
     public function comparison(Request $request)
     {
-        if (!Gate::allows('view dashboard')) {
+if (!Gate::allows('view dashboard comparison')) {
             return $this->errorMessage($this->moduleName, 403);
         }
 
@@ -500,7 +500,7 @@ class DashboardController extends Controller
      */
     public function prices(Request $request)
     {
-        if (!Gate::allows('view dashboard')) {
+	if (!Gate::allows('view dashboard prices')) {
             return $this->errorMessage($this->moduleName, 403);
         }
 
