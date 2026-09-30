@@ -115,6 +115,18 @@ class DashboardTestSeeder extends Seeder
             [$w['nabil'], 1, 8, 0],
         ]);
 
+        // Jours précédents pour l'Export Pointage Détaillé (§ 3.2) :
+        // Ali change de chantier (hiba le 26, Villa Test le 27, hiba le 28) → 2 blocs dans l'Excel
+        $this->punch($hiba, '2026-09-26', [
+            [$w['ali'], 1, 8, 2],
+            [$w['karim'], 1, 8, 0],
+        ]);
+
+        $this->punch($villa, '2026-09-27', [
+            [$w['ali'], 1, 8, 1],
+            [$w['samir'], 1, 8, 0],
+        ]);
+
         $this->command?->info('Données de test du tableau de bord créées (hiba, Villa Test, Symphonie — du 26 au 28/09/2026, + pointages du 28/09).');
     }
 

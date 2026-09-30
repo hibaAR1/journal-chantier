@@ -9,6 +9,7 @@ import DataTableComponent from "../../../components/data-table/data-table.compon
 import { PunchesColumnsLayout } from "../columns/punches-columns.layout.jsx";
 
 import PunchesStoreLayout from "../store/punches-store.layout.jsx";
+import PunchesExportLayout from "../export/punches-export.layout.jsx";
 
 import TableRefreshBtnComponent from "../../../components/table/table-refresh-btn/table-refresh-btn.component.jsx";
 import { useAuthContext } from "../../../context/auth/auth.context.jsx";
@@ -55,6 +56,12 @@ const PunchesTableLayout = () => {
         <DataTableComponent
           addBtn={
             permissions.includes("store punches") && <PunchesStoreLayout />
+          }
+          linkBtn={
+            // Export Pointage Détaillé (Excel) : réservé RH / Directeur d'Exploitation (§ 3.2)
+            permissions.includes("export punch details") && (
+              <PunchesExportLayout />
+            )
           }
           refreshBtn={<TableRefreshBtnComponent onClick={loadData} />}
           columns={PunchesColumnsLayout()}

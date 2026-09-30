@@ -103,5 +103,8 @@ Route::middleware(['check.token.expiration', 'auth:sanctum'])->group(function ()
 
     // État Récapitulatif Journalier de Pointage (cahier des charges V3 — § 3.1)
     Route::get('/punch-summary', [\App\Http\Controllers\PunchSummaryController::class, 'index']);
-       });
+
+    // Export Pointage Détaillé — Format Excel (cahier des charges V3 — § 3.2)
+    Route::get('/punch-details/export', [\App\Http\Controllers\PunchDetailExportController::class, 'export']);
+    });
 
