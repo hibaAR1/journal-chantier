@@ -336,12 +336,13 @@ class ReportController extends Controller
             $domPdf = $pdf->getDomPDF();
             $canvas = $domPdf->get_canvas();
 
-            if ($canvas) {
+                     if ($canvas) {
                 $canvas->page_text(
                     770,
                     580,
                     "Page {PAGE_NUM} / {PAGE_COUNT}",
-                    null,
+                    // Police explicite (avec null, dompdf plante sous Windows : "Undefined array key")
+                    $domPdf->getFontMetrics()->getFont('DejaVu Sans'),
                     12
                 );
             }
