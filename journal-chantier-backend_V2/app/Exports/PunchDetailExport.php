@@ -8,35 +8,34 @@ use Carbon\CarbonPeriod;
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithHeadings;
-use Maatwebsite\Excel\Concerns\WithPreCalculateFormulas;
 use Maatwebsite\Excel\Concerns\WithStrictNullComparison;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
-use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 /**
- * Export Pointage Détaillé — Format Excel (cahier des charges V3 — § 3.2).
+ * Export Pointage Détaillé — Format Excel (cahier des charges V3 — § 3.2, présentation demandée par le superviseur).
  *
- * Colonnes : CHANTIER | MATRICULE | NOM | FONCTION | HEURES | une colonne par jour (JJ-MMM) | TOTAL
+ * Colonnes : MATRICULE | NOM | FONCTION | CHANTIER | HN | HS | DATE
  * Règles :
- *  - chaque agent génère 2 lignes par chantier (HN puis HS) ;
- *  - s'il change de chantier, il a un bloc de 2 lignes par chantier ;
+ *  - un bloc par agent et par chantier ; l'agent (matricule, nom, fonction, chantier) est écrit
+ *    seulement sur la 1re ligne du bloc ;
+ *  - puis une ligne par jour de la période choisie (tous les jours, sans en sauter) ;
  *  - 0 = agent non pointé ce jour-là sur ce chantier ;
- *  - TOTAL = formule Excel (somme des jours de la ligne) ;
  *  - feuille nommée "Pointage_JJ-MMM_au_JJ-MMM" (ou "Pointage_JJ-MMM" pour un seul jour), en-têtes en couleur.
  *
  * WithStrictNullComparison : les 0 sont bien écrits "0" (sinon la cellule resterait vide).
- * WithPreCalculateFormulas : le TOTAL est déjà calculé à l'ouverture du fichier.
  */
-class PunchDetailExport implements FromArray, WithHeadings, WithTitle, WithStyles, ShouldAutoSize,
-    WithStrictNullComparison, WithPreCalculateFormulas
+class PunchDetailExport implements FromArray, WithHeadings, WithTitle, WithStyles, ShouldAutoSize, WithStrictNullComparison
 {
     /** @var string[] jours de la période, au format Y-m-d */
     private array $days;
+
+    /** @var int[] numéros des lignes Excel où commence un agent (mises en gras) */
+    private array $firstLines = [];
 
     /**
      * @param string     $from    date début (Y-m-d)
@@ -63,11 +62,7 @@ class PunchDetailExport implements FromArray, WithHeadings, WithTitle, WithStyle
 
     public function headings(): array
     {
-        return array_merge(
-            ['CHANTIER', 'MATRICULE', 'NOM', 'FONCTION', 'HEURES'],
-            array_map(fn($day) => $this->dayLabel($day), $this->days),
-            ['TOTAL']
-        );
+        return ['MATRICULE', 'NOM', 'FONCTION', 'CHANTIER', 'HN', 'HS', 'DATE'];
     }
 
     public function array(): array
@@ -81,12 +76,13 @@ class PunchDetailExport implements FromArray, WithHeadings, WithTitle, WithStyle
             ->get()
             ->filter(fn($punchWorker) => $punchWorker->worker && $punchWorker->punch && $punchWorker->punch->site);
 
-        // Un bloc = un agent sur un chantier ; trié par nom d'agent puis par chantier
+        // Un bloc = un agent sur un chantier ; trié par matricule puis par chantier
         $blocks = $punchWorkers
             ->groupBy(fn($punchWorker) => $punchWorker->worker_id . '-' . $punchWorker->punch->site_id)
-            ->sortBy(fn($rows) => mb_strtolower($rows->first()->worker->name . ' ' . $rows->first()->punch->site->name));
+            ->sortBy(fn($rows) => mb_strtolower($rows->first()->worker->registration_number . ' ' . $rows->first()->punch->site->name));
 
         $rows = [];
+        $this->firstLines = [];
         $line = 2; // la ligne 1 contient les en-têtes
 
         foreach ($blocks as $blockRows) {
@@ -95,23 +91,28 @@ class PunchDetailExport implements FromArray, WithHeadings, WithTitle, WithStyle
             // Heures par jour (0 = non pointé ce jour-là sur ce chantier)
             $byDay = $blockRows->groupBy(fn($punchWorker) => Carbon::parse($punchWorker->punch->date)->format('Y-m-d'));
 
-            foreach (['HN' => 'natural_hours', 'HS' => 'overtime_hours'] as $type => $field) {
-                $hours = array_map(
-                    fn($day) => (float) $byDay->get($day, collect())->sum($field),
-                    $this->days
-                );
+            foreach ($this->days as $index => $day) {
+                $isFirst = $index === 0;
 
-                $rows[] = array_merge(
-                    [
-                        $first->punch->site->name,
+                // L'agent est écrit seulement sur la 1re ligne de son bloc
+                $identity = $isFirst
+                    ? [
                         $first->worker->registration_number,
                         $first->worker->name,
                         optional($first->worker->resourceRel)->name,
-                        $type,
-                    ],
-                    $hours,
-                    [$this->totalFormula($line)]
-                );
+                        $first->punch->site->name,
+                    ]
+                    : ['', '', '', ''];
+
+                $rows[] = array_merge($identity, [
+                    (float) $byDay->get($day, collect())->sum('natural_hours'),
+                    (float) $byDay->get($day, collect())->sum('overtime_hours'),
+                    Carbon::parse($day)->format('d/m/Y'),
+                ]);
+
+                if ($isFirst) {
+                    $this->firstLines[] = $line;
+                }
 
                 $line++;
             }
@@ -122,23 +123,24 @@ class PunchDetailExport implements FromArray, WithHeadings, WithTitle, WithStyle
 
     public function styles(Worksheet $sheet)
     {
-        $lastColumn = Coordinate::stringFromColumnIndex(5 + count($this->days) + 1);
         $lastRow = max($sheet->getHighestRow(), 1);
 
         // En-têtes en couleur (orange TCGM, texte blanc en gras)
-        $sheet->getStyle("A1:{$lastColumn}1")->applyFromArray([
+        $sheet->getStyle('A1:G1')->applyFromArray([
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'C94D25']],
         ]);
 
         // Bordures et centrage de tout le tableau
-        $sheet->getStyle("A1:{$lastColumn}{$lastRow}")->applyFromArray([
+        $sheet->getStyle("A1:G{$lastRow}")->applyFromArray([
             'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'BFBFBF']]],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
 
-        // Colonne TOTAL en gras
-        $sheet->getStyle("{$lastColumn}1:{$lastColumn}{$lastRow}")->getFont()->setBold(true);
+        // Première ligne de chaque agent en gras (matricule, nom, fonction, chantier)
+        foreach ($this->firstLines as $line) {
+            $sheet->getStyle("A{$line}:D{$line}")->getFont()->setBold(true);
+        }
 
         // En-têtes toujours visibles quand on descend dans le fichier
         $sheet->freezePane('A2');
@@ -147,18 +149,7 @@ class PunchDetailExport implements FromArray, WithHeadings, WithTitle, WithStyle
     }
 
     /**
-     * TOTAL de la ligne = formule Excel : se met à jour si on corrige un chiffre dans Excel.
-     */
-    private function totalFormula(int $line): string
-    {
-        $firstDay = Coordinate::stringFromColumnIndex(6);
-        $lastDay = Coordinate::stringFromColumnIndex(5 + count($this->days));
-
-        return "=SUM({$firstDay}{$line}:{$lastDay}{$line})";
-    }
-
-    /**
-     * "2026-09-19" → "19-sept" (JJ-MMM en français)
+     * "2026-09-19" → "19-sept" (JJ-MMM en français), pour le nom de la feuille
      */
     private function dayLabel(string $day): string
     {
