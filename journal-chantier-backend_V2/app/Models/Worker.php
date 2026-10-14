@@ -18,6 +18,12 @@ class Worker extends Model
         'name',
         'registration_number',
         'contract_type',
+        'is_active',
+    ];
+
+    // Situation Actuelle (CDC § 3.3) : true = ACTIF, false = INACTIF
+    protected $casts = [
+        'is_active' => 'boolean',
     ];
 
     public function resourceRel()

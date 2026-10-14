@@ -13,6 +13,7 @@ use App\Models\Worker;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Imports\WorkersImport;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class WorkerController extends Controller
 {
@@ -21,9 +22,16 @@ class WorkerController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index() {
-        // Return all workers
-        return WorkerResource::collection(Worker::all());
+    public function index(Request $request) {
+        // Situation Actuelle (CDC § 3.3) :
+        //  - les profils RH ("manage worker status") voient la liste complète, y compris les INACTIF ;
+        //  - les autres, et toutes les listes de sélection (pointage, rendement, affectation : active_only=1),
+        //    ne voient que les ouvriers ACTIF.
+        $activeOnly = !Gate::allows('manage worker status') || $request->boolean('active_only');
+
+        return WorkerResource::collection(
+            Worker::when($activeOnly, fn($query) => $query->where('is_active', true))->get()
+        );
     }
 
     /**
@@ -84,6 +92,13 @@ class WorkerController extends Controller
         if ($worker) {
             // Validate the request
             $fields = $request->validated();
+
+            // Seuls les profils RH peuvent changer la Situation Actuelle (ACTIF / INACTIF)
+            if (array_key_exists('is_active', $fields) && !Gate::allows('manage worker status')) {
+                return response()->json([
+                    'message' => "Seuls les profils RH peuvent modifier la Situation Actuelle d'un ouvrier."
+                ], 403);
+            }
 
             // Update the worker
             $worker->update($fields);

@@ -1,67 +1,76 @@
-import {useEffect} from "react";
+import { useEffect } from "react";
 
-import {useWorkersContext} from "../../../context/workers/workers.context.jsx";
-import {useLoadingContext} from "../../../context/loading/loading.context.jsx";
+import { useWorkersContext } from "../../../context/workers/workers.context.jsx";
+import { useLoadingContext } from "../../../context/loading/loading.context.jsx";
 
 import LoadingComponent from "../../../components/loading/loading.component.jsx";
 import DataTableComponent from "../../../components/data-table/data-table.component.jsx";
 
-import {WorkersColumnsLayout} from "../columns/workers-columns.layout.jsx";
+import { WorkersColumnsLayout } from "../columns/workers-columns.layout.jsx";
 
 import WorkersStoreLayout from "../store/workers-store.layout.jsx";
 
 import TableRefreshBtnComponent from "../../../components/table/table-refresh-btn/table-refresh-btn.component.jsx";
-import {useAuthContext} from "../../../context/auth/auth.context.jsx";
+import { useAuthContext } from "../../../context/auth/auth.context.jsx";
 import WorkersLinksLayout from "../links/workers-links.layout.jsx";
 
 const WorkersTableLayout = () => {
-    const {workers, getWorkers, getResources} = useWorkersContext();
+  const { workers, getWorkers, getResources } = useWorkersContext();
 
-    const {loading, setLoading} = useLoadingContext();
+  const { loading, setLoading } = useLoadingContext();
 
-    const {user} = useAuthContext();
+  const { user } = useAuthContext();
 
-    const permissions = user?.permissions || [];
+  const permissions = user?.permissions || [];
 
-    const listVisibles = [
-        'Matricule', 'Nom', 'Callification', 'Type de contrat', 'Actions'
-    ];
+  const listVisibles = [
+    "Matricule",
+    "Nom",
+    "Callification",
+    "Type de contrat",
+    "Situation actuelle",
+    "Actions",
+  ];
 
+  const hiddenColumns = {};
 
-    const hiddenColumns = {};
+  const loadData = async () => {
+    setLoading(true);
 
-    const loadData = async () => {
-        setLoading(true);
+    await getWorkers();
 
-        await getWorkers();
+    await getResources();
 
-        await getResources();
+    setLoading(false);
+  };
 
-        setLoading(false);
-    }
+  useEffect(() => {
+    loadData();
+  }, []);
 
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    return (
-        <>
-            {
-                loading
-                    ? <LoadingComponent />
-                    :
-                    <DataTableComponent
-                        addBtn={permissions.includes("store workers") && <WorkersStoreLayout />}
-                        refreshBtn={<TableRefreshBtnComponent onClick={loadData} />}
-                        linkBtn={<WorkersLinksLayout />}
-                        columns={WorkersColumnsLayout()}
-                        data={workers}
-                        list={listVisibles}
-                        hiddenColumns={hiddenColumns}
-                    />
-            }
-        </>
-    )
-}
+  return (
+    <>
+      {loading ? (
+        <LoadingComponent />
+      ) : (
+        <DataTableComponent
+          addBtn={
+            permissions.includes("store workers") && <WorkersStoreLayout />
+          }
+          refreshBtn={<TableRefreshBtnComponent onClick={loadData} />}
+          linkBtn={<WorkersLinksLayout />}
+          columns={WorkersColumnsLayout()}
+          data={workers}
+          list={listVisibles}
+          hiddenColumns={hiddenColumns}
+          // Ouvrier INACTIF (visible seulement par les profils RH) : ligne grisée
+          rowClassFn={(worker) =>
+            worker.is_active === false ? "bg-gray-100 text-gray-500" : ""
+          }
+        />
+      )}
+    </>
+  );
+};
 
 export default WorkersTableLayout;

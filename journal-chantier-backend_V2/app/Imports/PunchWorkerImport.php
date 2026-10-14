@@ -7,6 +7,7 @@ use App\Models\PunchWorker;
 use App\Models\Worker;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
+use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Concerns\WithValidation;
 
 class PunchWorkerImport implements ToModel, WithHeadingRow, WithValidation
@@ -42,7 +43,15 @@ class PunchWorkerImport implements ToModel, WithHeadingRow, WithValidation
     {
         return [
             'dossier_pointage' => 'required|string|exists:punches,code',
-            'matricule' => 'required|string|exists:workers,registration_number',
+            // Situation Actuelle (CDC § 3.3) : un ouvrier INACTIF ne peut plus être pointé
+            'matricule' => ['required', 'string', Rule::exists('workers', 'registration_number')->where('is_active', true)],
+        ];
+    }
+
+    public function customValidationMessages(): array
+    {
+        return [
+            'matricule.exists' => "Matricule introuvable ou ouvrier INACTIF : il ne peut plus être pointé.",
         ];
     }
 

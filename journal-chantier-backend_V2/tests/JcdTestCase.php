@@ -15,6 +15,7 @@ use Database\Seeders\ResourceSeeder;
 use Database\Seeders\RoleSeeder;
 use Database\Seeders\WorkSeeder;
 use Database\Seeders\WorkTypeSeeder;
+use Database\Seeders\WorkerStatusPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -46,6 +47,7 @@ abstract class JcdTestCase extends TestCase
             RoleSeeder::class,
             DashboardPermissionSeeder::class,
             PunchDetailPermissionSeeder::class,
+            WorkerStatusPermissionSeeder::class,
             LocationSeeder::class,
             ResourceSeeder::class,
             WorkSeeder::class,

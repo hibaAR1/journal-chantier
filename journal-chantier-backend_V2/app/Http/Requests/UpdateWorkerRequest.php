@@ -24,8 +24,10 @@ class UpdateWorkerRequest extends FormRequest
         return [
             'resource_id' => 'required|exists:resources,id',
             'name' => ['required', 'string', 'max:150'],
-            'contract_type' => ['required', 'string', 'max:150', 'in:CDC,TECTRA,CDI'],
+            'contract_type' => ['required', 'string', 'max:150', 'in:CDC,TECTRA,ANAPEC,CDI'],
             'registration_number' => 'required|string|unique:workers,registration_number,' . $this->worker,
+            // Situation Actuelle : true = ACTIF, false = INACTIF (modifiable seulement par les profils RH)
+            'is_active' => 'sometimes|boolean',
         ];
     }
 }

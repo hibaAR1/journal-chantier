@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Models\Punch;
 use App\Models\PunchWorker;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StorePunchWorkerRequest extends FormRequest
 {
@@ -24,7 +25,7 @@ class StorePunchWorkerRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'worker_id' => 'required|exists:workers,id',
+            'worker_id' => ['required', Rule::exists('workers', 'id')->where('is_active', true)],
             'punch_id' => 'required|exists:punches,id',
             'type' => 'required|integer|in:1,2,3,4,5,6,7',
             // natural_hours required if type is 1, 2 or 3
@@ -59,5 +60,15 @@ class StorePunchWorkerRequest extends FormRequest
                 );
             }
         });
+    }
+
+    /**
+     * Situation Actuelle (CDC § 3.3) : un ouvrier INACTIF ne peut plus être sélectionné.
+     */
+    public function messages(): array
+    {
+        return [
+            'worker_id.exists' => "Cet ouvrier est INACTIF : il ne peut plus être sélectionné.",
+        ];
     }
 }

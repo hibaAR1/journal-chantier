@@ -23,6 +23,9 @@ class WorkerResource extends JsonResource
             'registration_number' => $this->registration_number,
             'contract_type' => $this->contract_type,
             'code' => $this->code,
+            // Situation Actuelle (CDC § 3.3)
+            'is_active' => (bool) $this->is_active,
+            'situation' => $this->is_active ? 'ACTIF' : 'INACTIF',
             'type' => optional($this->punchWorkers()->latest()->first())->type,
         ];
     }

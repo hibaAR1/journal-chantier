@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreAssignmentWorkerRequest extends FormRequest
 {
@@ -22,8 +23,18 @@ class StoreAssignmentWorkerRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'worker_id' => 'required|exists:workers,id',
+            'worker_id' => ['required', Rule::exists('workers', 'id')->where('is_active', true)],
             'assignment_id' => 'required|exists:assignments,id',
+        ];
+    }
+
+    /**
+     * Situation Actuelle (CDC § 3.3) : un ouvrier INACTIF ne peut plus être sélectionné.
+     */
+    public function messages(): array
+    {
+        return [
+            'worker_id.exists' => "Cet ouvrier est INACTIF : il ne peut plus être sélectionné.",
         ];
     }
 }
