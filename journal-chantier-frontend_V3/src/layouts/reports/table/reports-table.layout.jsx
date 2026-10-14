@@ -1,70 +1,89 @@
-import {useEffect} from "react";
+import { useEffect } from "react";
 
-import {useReportsContext} from "../../../context/reports/reports.context.jsx";
-import {useLoadingContext} from "../../../context/loading/loading.context.jsx";
+import { useReportsContext } from "../../../context/reports/reports.context.jsx";
+import { useLoadingContext } from "../../../context/loading/loading.context.jsx";
 
 import LoadingComponent from "../../../components/loading/loading.component.jsx";
 import DataTableComponent from "../../../components/data-table/data-table.component.jsx";
 
-import {ReportsColumnsLayout} from "../columns/reports-columns.layout.jsx";
+import { ReportsColumnsLayout } from "../columns/reports-columns.layout.jsx";
 
 import ReportsStoreLayout from "../store/reports-store.layout.jsx";
 
 import TableRefreshBtnComponent from "../../../components/table/table-refresh-btn/table-refresh-btn.component.jsx";
-import {useAuthContext} from "../../../context/auth/auth.context.jsx";
+import { useAuthContext } from "../../../context/auth/auth.context.jsx";
+import ReportsPunchSummaryLinkLayout from "../punch-summary-link/reports-punch-summary-link.layout.jsx";
 
 const ReportsTableLayout = () => {
-    const {reports, getReports, getSites} = useReportsContext();
+  const { reports, getReports, getSites } = useReportsContext();
 
-    const {loading, setLoading} = useLoadingContext();
+  const { loading, setLoading } = useLoadingContext();
 
-    const {user} = useAuthContext();
+  const { user } = useAuthContext();
 
-    const permissions = user?.permissions || [];
+  const permissions = user?.permissions || [];
 
-    const listVisibles = [
-        'Code', 'Chantier', 'Date', 'Observations', 'Saisie', 'Actions'
-    ];
+  const listVisibles = [
+    "Code",
+    "Chantier",
+    "Date",
+    "Observations",
+    "Saisie",
+    "Actions",
+  ];
 
-    const hiddenColumns = {
-        'observations': false,
-    };
+  const hiddenColumns = {
+    observations: false,
+  };
 
-    const loadData = async () => {
-        setLoading(true);
+  const loadData = async () => {
+    setLoading(true);
 
-        await getReports();
+    await getReports();
 
-        await getSites();
+    await getSites();
 
-        setLoading(false);
-    }
+    setLoading(false);
+  };
 
-    useEffect(() => {
-        loadData();
-    }, []);
+  useEffect(() => {
+    loadData();
+  }, []);
 
-    const sanitizeReports = (reports || []).filter(
-        (r) => r && typeof r === "object" && Object.prototype.hasOwnProperty.call(r, "date")
-    );
+  const sanitizeReports = (reports || []).filter(
+    (r) =>
+      r &&
+      typeof r === "object" &&
+      Object.prototype.hasOwnProperty.call(r, "date"),
+  );
 
-    return (
-        <>
-            {
-                loading
-                    ? <LoadingComponent />
-                    :
-                    <DataTableComponent
-                        addBtn={permissions.includes("store reports") && <ReportsStoreLayout />}
-                        refreshBtn={<TableRefreshBtnComponent onClick={loadData}/>}
-                        columns={ReportsColumnsLayout()}
-                        data={sanitizeReports}
-                        list={listVisibles}
-                        hiddenColumns={hiddenColumns}
-                    />
-            }
-        </>
-    )
-}
+  return (
+    <>
+      {loading ? (
+        <LoadingComponent />
+      ) : (
+        <DataTableComponent
+          addBtn={
+            permissions.includes("store reports") && <ReportsStoreLayout />
+          }
+          refreshBtn={
+            <>
+              <TableRefreshBtnComponent onClick={loadData} />
+
+              {/* État récapitulatif : juste à côté de Rafraîchir (permission "view punch summary") */}
+              {permissions.includes("view punch summary") && (
+                <ReportsPunchSummaryLinkLayout />
+              )}
+            </>
+          }
+          columns={ReportsColumnsLayout()}
+          data={sanitizeReports}
+          list={listVisibles}
+          hiddenColumns={hiddenColumns}
+        />
+      )}
+    </>
+  );
+};
 
 export default ReportsTableLayout;

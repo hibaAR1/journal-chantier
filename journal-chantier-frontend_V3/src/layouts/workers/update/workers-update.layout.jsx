@@ -48,17 +48,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select.jsx";
-import { useAuthContext } from "../../../context/auth/auth.context.jsx";
 
 const WorkersUpdateLayout = ({ worker }) => {
   const { resources, updateWorker } = useWorkersContext();
-
-  const { user } = useAuthContext();
-
-  // Seuls les profils RH peuvent modifier la Situation Actuelle (CDC § 3.3.2)
-  const canManageStatus = (user?.permissions || []).includes(
-    "manage worker status",
-  );
 
   const [isOpen, setIsOpen] = useState(false);
 
@@ -84,17 +76,15 @@ const WorkersUpdateLayout = ({ worker }) => {
     contract_type: z.enum(["CDC", "TECTRA", "CDI", "ANAPEC"], {
       errorMap: () => ({ message: errorMessages.select("un type de contrat") }),
     }),
-    situation: z.enum(["ACTIF", "INACTIF"]),
   });
 
   // Valeurs du formulaire = données ACTUELLES de l'ouvrier
-  // (après une modification, le crayon doit réafficher la nouvelle situation, pas l'ancienne)
+  // (après une modification, le crayon doit réafficher les nouvelles valeurs, pas les anciennes)
   const workerValues = () => ({
     resource_id: worker.resource_id ?? "",
     name: worker.name ?? "",
     registration_number: worker.registration_number ?? "",
     contract_type: worker.contract_type ?? "",
-    situation: worker.is_active === false ? "INACTIF" : "ACTIF",
   });
 
   const form = useForm({
@@ -110,13 +100,8 @@ const WorkersUpdateLayout = ({ worker }) => {
     form.reset(workerValues());
   }, [isOpen, worker]);
 
-  const onSubmit = async ({ situation, ...values }) => {
-    // La situation n'est envoyée que par un profil RH (sinon le serveur refuse)
-    const payload = canManageStatus
-      ? { ...values, is_active: situation === "ACTIF" }
-      : values;
-
-    await updateWorker(worker.id, payload, form);
+  const onSubmit = async (values) => {
+    await updateWorker(worker.id, values, form);
 
     if (Object.keys(errors).length <= 0) {
       closeSheet();
@@ -268,39 +253,6 @@ const WorkersUpdateLayout = ({ worker }) => {
               </FormItem>
             )}
           />
-
-          {/* Situation Actuelle (CDC § 3.3) : visible seulement pour les profils RH */}
-          {canManageStatus && (
-            <FormField
-              control={form.control}
-              name="situation"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    Situation actuelle <LabelRequiredStarComponent />
-                  </FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger variant="primary">
-                        <SelectValue placeholder="Sélectionner" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="ACTIF">ACTIF</SelectItem>
-                      <SelectItem value="INACTIF">INACTIF</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <p className="text-xs text-gray-500">
-                    Un ouvrier INACTIF n&apos;apparaît plus dans les listes de
-                    pointage et de rendement. Son historique est conservé.
-                  </p>
-
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
 
           <div className="flex justify-start gap-2">
             <Button

@@ -5,6 +5,7 @@ import FilterTextComponent from "../../../components/filters/filter-text/filter-
 
 import WorkersUpdateLayout from "../update/workers-update.layout.jsx";
 import WorkersDestroyLayout from "../destroy/workers-destroy.layout.jsx";
+import WorkersToggleStatusLayout from "../toggle-status/workers-toggle-status.layout.jsx";
 
 export const WorkersColumnsLayout = () => {
   const { user } = useAuthContext();
@@ -171,7 +172,7 @@ export const WorkersColumnsLayout = () => {
       name: "Actions",
       header: () => {
         return (
-          <div className="flex justify-center items-center font-bold hover:text-gray-100 px-0 min-w-[80px]">
+          <div className="flex justify-center items-center font-bold hover:text-gray-100 px-0 min-w-[110px]">
             Actions
           </div>
         );
@@ -183,6 +184,11 @@ export const WorkersColumnsLayout = () => {
           <div className="flex justify-center items-center gap-1">
             {permissions.includes("update workers") && (
               <WorkersUpdateLayout worker={item} />
+            )}
+
+            {/* Situation Actuelle (CDC § 3.3) : bouton ACTIF / INACTIF, profils RH seulement */}
+            {permissions.includes("manage worker status") && (
+              <WorkersToggleStatusLayout worker={item} />
             )}
 
             {permissions.includes("delete workers") && (

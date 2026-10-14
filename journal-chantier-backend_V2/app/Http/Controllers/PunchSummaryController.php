@@ -13,7 +13,8 @@ use Illuminate\Support\Facades\Gate;
  * GET /api/punch-summary?date=2026-09-28            → tous les chantiers
  * GET /api/punch-summary?date=2026-09-28&site_id=3  → un chantier
  *
- * Mêmes droits que les pointages :
+ * Accès : permission "view punch summary" (bouton « État récapitulatif » de la page Journaux,
+ * donnée seulement à l'Administrateur). Ensuite, mêmes chantiers que les pointages :
  *  - "view all punches"  → tous les chantiers ;
  *  - "view some punches" → seulement les chantiers dont l'utilisateur est responsable.
  */
@@ -23,6 +24,11 @@ class PunchSummaryController extends Controller
 
     public function index(Request $request, PunchSummaryService $service)
     {
+        // Bouton « État récapitulatif » de la page Journaux : seulement avec la permission
+        if (!Gate::allows('view punch summary')) {
+            return $this->errorMessage($this->moduleName, 403);
+        }
+
         $siteIds = $this->visibleSiteIds();
 
         if ($siteIds === []) {

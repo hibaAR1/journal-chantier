@@ -11,6 +11,7 @@ use Database\Seeders\LocationSeeder;
 use Database\Seeders\PermissionModuleSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\PunchDetailPermissionSeeder;
+use Database\Seeders\PunchSummaryPermissionSeeder;
 use Database\Seeders\ResourceSeeder;
 use Database\Seeders\RoleSeeder;
 use Database\Seeders\WorkSeeder;
@@ -48,6 +49,7 @@ abstract class JcdTestCase extends TestCase
             DashboardPermissionSeeder::class,
             PunchDetailPermissionSeeder::class,
             WorkerStatusPermissionSeeder::class,
+            PunchSummaryPermissionSeeder::class,
             LocationSeeder::class,
             ResourceSeeder::class,
             WorkSeeder::class,
