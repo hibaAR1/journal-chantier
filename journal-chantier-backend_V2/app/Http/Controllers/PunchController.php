@@ -52,7 +52,6 @@ class PunchController extends Controller
             $punches = Punch::with([
                 'site:id,name'
             ])
-                ->withCount('punchWorkers')
                 ->select([
                     'id',
                     'code',
@@ -61,6 +60,9 @@ class PunchController extends Controller
                     'validated',
                     'created_at'
                 ])
+                // Nb Ouvriers (CDC § 3.4.1) : seulement les ouvriers avec heures > 0.
+                // ⚠️ withCount APRÈS select(), sinon select() efface le compteur (il valait toujours 0)
+                ->withCount('activePunchWorkers as punch_workers_count')
                 ->latest()
                 ->paginate(20);
 
@@ -73,7 +75,6 @@ class PunchController extends Controller
             $punches = Punch::with([
                 'site:id,name'
             ])
-                ->withCount('punchWorkers')
                 ->select([
                     'id',
                     'code',
@@ -82,6 +83,9 @@ class PunchController extends Controller
                     'validated',
                     'created_at'
                 ])
+                // Nb Ouvriers (CDC § 3.4.1) : seulement les ouvriers avec heures > 0.
+                // ⚠️ withCount APRÈS select(), sinon select() efface le compteur (il valait toujours 0)
+                ->withCount('activePunchWorkers as punch_workers_count')
                 ->whereHas('site', function($query) use ($id) {
 
                     $query->where(function($q) use ($id) {
