@@ -5,6 +5,7 @@ namespace Tests;
 use App\Models\Site;
 use App\Models\User;
 use Carbon\Carbon;
+use Database\Seeders\AccessDefinitionSeeder;
 use Database\Seeders\DashboardPermissionSeeder;
 use Database\Seeders\DashboardTestSeeder;
 use Database\Seeders\LocationSeeder;
@@ -50,6 +51,7 @@ abstract class JcdTestCase extends TestCase
             PunchDetailPermissionSeeder::class,
             WorkerStatusPermissionSeeder::class,
             PunchSummaryPermissionSeeder::class,
+            AccessDefinitionSeeder::class,
             LocationSeeder::class,
             ResourceSeeder::class,
             WorkSeeder::class,

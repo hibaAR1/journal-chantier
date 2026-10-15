@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
         $this->call(PunchDetailPermissionSeeder::class);
         $this->call(WorkerStatusPermissionSeeder::class);
         $this->call(PunchSummaryPermissionSeeder::class);
+        $this->call(AccessDefinitionSeeder::class);
         $this->call(UserSeeder::class);
 
         $this->call(LocationSeeder::class);
