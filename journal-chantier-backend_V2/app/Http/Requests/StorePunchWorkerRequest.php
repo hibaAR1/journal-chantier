@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Punch;
 use App\Models\PunchWorker;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -38,26 +37,24 @@ class StorePunchWorkerRequest extends FormRequest
     public function withValidator($validator)
     {
         $validator->after(function ($validator) {
+            if ($validator->errors()->isNotEmpty()) return;
 
-            $punchId = $this->punch_id;
-            $workerId = $this->worker_id;
-
-            $punch = Punch::find($punchId);
-
-            if (!$punch || !$workerId) return;
-
-            $exists = PunchWorker::where('worker_id', $workerId)
-                ->where('punch_id', '!=', $punchId)
-                ->whereHas('punch', function ($q) use ($punch) {
-                    $q->whereDate('date', $punch->date);
-                })
+            // Le même ouvrier ne peut pas apparaître deux fois dans le même dossier de pointage
+            $sameFolder = PunchWorker::where('worker_id', $this->worker_id)
+                ->where('punch_id', $this->punch_id)
                 ->exists();
 
-            if ($exists) {
-                $validator->errors()->add(
-                    'worker_id',
-                    "Cet ouvrier est déjà pointé dans un autre chantier à cette date."
-                );
+            if ($sameFolder) {
+                $validator->errors()->add('worker_id', "Cet ouvrier est déjà pointé dans ce dossier.");
+                return;
+            }
+
+            // CDC § 3.4.2 : un ouvrier peut travailler sur plusieurs chantiers le même jour,
+            // mais le total de ses heures normales ne doit pas dépasser 9 h
+            $error = PunchWorker::dailyNaturalHoursError($this->worker_id, $this->punch_id, $this->natural_hours ?? 0);
+
+            if ($error) {
+                $validator->errors()->add('natural_hours', $error);
             }
         });
     }

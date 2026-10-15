@@ -37,9 +37,9 @@ class ModificationPointageTest extends JcdTestCase
         $this->assertEquals(5, $ali->fresh()->overtime_hours);
     }
 
-    public function test_un_ouvrier_deja_pointe_ailleurs_le_meme_jour_reste_bloque(): void
+        public function test_un_ouvrier_deja_pointe_ailleurs_ne_peut_pas_depasser_9_heures(): void
     {
-        // Ligne d'Ali à hiba le 28 ; on essaie d'y mettre Samir, déjà pointé à Villa Test le 28
+        // Ligne d'Ali à hiba le 28 ; on y met Samir, déjà pointé 8 h à Villa Test le 28 → 8 + 8 = 16 h > 9 h
         $ali = $this->line('T001', '2026-09-28');
 
         $this->api($this->makeUser('magasinier', ['admin']))
@@ -51,6 +51,6 @@ class ModificationPointageTest extends JcdTestCase
                 'overtime_hours' => 0,
             ])
             ->assertStatus(422)
-            ->assertJsonPath('errors.worker_id.0', 'Cet ouvrier est déjà affecté à un autre chantier à cette date.');
+            ->assertJsonValidationErrors(['natural_hours']);
     }
 }

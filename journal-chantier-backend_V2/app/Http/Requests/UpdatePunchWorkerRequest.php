@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Punch;
 use App\Models\PunchWorker;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -37,31 +36,29 @@ class UpdatePunchWorkerRequest extends FormRequest
     public function withValidator($validator)
     {
         $validator->after(function ($validator) {
+            if ($validator->errors()->isNotEmpty()) return;
 
-            $punchId = $this->punch_id;
-            $workerId = $this->worker_id;
+            // Id de la ligne modifiée : la route est /punch-worker/{punch_worker}
+            $currentId = $this->route('punch_worker');
 
-     // Id de la ligne modifiée : la route est /punch-worker/{punch_worker}
-            $currentId = $this->route('punch_worker');// important
-
-            $punch = Punch::find($punchId);
-
-            if (!$punch) return;
-
-            $exists = PunchWorker::where('worker_id', $workerId)
+            // Le même ouvrier ne peut pas apparaître deux fois dans le même dossier de pointage
+            $sameFolder = PunchWorker::where('worker_id', $this->worker_id)
+                ->where('punch_id', $this->punch_id)
                 ->where('id', '!=', $currentId)
-                ->whereHas('punch', function ($q) use ($punch) {
-                    $q->whereDate('date', $punch->date);
-                })
                 ->exists();
 
-            if ($exists) {
-                $validator->errors()->add(
-                    'worker_id',
-                    "Cet ouvrier est déjà affecté à un autre chantier à cette date."
-                );
+            if ($sameFolder) {
+                $validator->errors()->add('worker_id', "Cet ouvrier est déjà pointé dans ce dossier.");
+                return;
+            }
+
+            // CDC § 3.4.2 : maximum 9 h normales par jour, tous chantiers confondus
+            // (les anciennes heures de la ligne modifiée ne comptent pas)
+            $error = PunchWorker::dailyNaturalHoursError($this->worker_id, $this->punch_id, $this->natural_hours ?? 0, $currentId);
+
+            if ($error) {
+                $validator->errors()->add('natural_hours', $error);
             }
         });
     }
-
 }

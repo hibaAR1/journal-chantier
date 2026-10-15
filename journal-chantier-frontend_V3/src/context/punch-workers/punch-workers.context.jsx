@@ -33,6 +33,29 @@ export const PunchWorkersProvider = ({ children }) => {
 
   const { toast } = useToast();
 
+  // Erreurs du serveur → sous chaque champ du formulaire + message d'alerte.
+  // Ex. CDC § 3.4.2 : « Ali a déjà 8 h normales le 28/09/2026 (hiba) : maximum 1 h possibles ici… »
+  const showErrors = (response, setError, title) => {
+    const errors = response?.data?.errors ?? {};
+
+    ["worker_id", "type", "natural_hours", "overtime_hours"].forEach(
+      (field) => {
+        if (errors[field]) {
+          setError(field, { message: errors[field].join(" ") });
+        }
+      },
+    );
+
+    const firstMessage =
+      Object.values(errors)[0]?.[0] ?? response?.data?.message;
+
+    toast({
+      variant: "danger",
+      title,
+      description: firstMessage ?? "Une erreur s'est produite.",
+    });
+  };
+
   const getPunch = async (id) => {
     await PunchesApis.getPunch(id)
       .then(({ data }) => {
@@ -69,26 +92,6 @@ export const PunchWorkersProvider = ({ children }) => {
 
   const addPunchWorker = async (values, form, punchId) => {
     const { setError, reset } = form;
-    const checkResponse = await PunchWorkersApis.checkWorker(
-      values.worker_id,
-      punchId,
-    );
-
-    if (Boolean(checkResponse.data.exists)) {
-      setError("worker_id", {
-        message: "Cet ouvrier est déjà affecté à un chantier pour cette date.",
-      });
-
-      toast({
-        variant: "danger",
-        title: "Affectation impossible",
-        description:
-          "Cet ouvrier est déjà affecté à un chantier pour cette date.",
-      });
-
-      return;
-    }
-
     const payload = {
       ...values,
       punch_id: punchId,
@@ -114,20 +117,9 @@ export const PunchWorkersProvider = ({ children }) => {
           reset();
         }
       })
-      .catch(({ response }) => {
-        setError("worker_id", {
-          message: response.data.errors.worker_id.join(),
-        });
-        setError("type", {
-          message: response.data.errors.type.join(),
-        });
-        setError("natural_hours", {
-          message: response.data.errors.natural_hours.join(),
-        });
-        setError("overtime_hours", {
-          message: response.data.errors.overtime_hours.join(),
-        });
-      });
+      .catch(({ response }) =>
+        showErrors(response, setError, "Ajout impossible"),
+      );
   };
 
   const updatePunchWorker = async (id, values, form, punchId) => {
@@ -164,20 +156,9 @@ export const PunchWorkersProvider = ({ children }) => {
           reset();
         }
       })
-      .catch(({ response }) => {
-        setError("worker_id", {
-          message: response.data.errors.worker_id.join(),
-        });
-        setError("type", {
-          message: response.data.errors.type.join(),
-        });
-        setError("natural_hours", {
-          message: response.data.errors.natural_hours.join(),
-        });
-        setError("overtime_hours", {
-          message: response.data.errors.overtime_hours.join(),
-        });
-      });
+      .catch(({ response }) =>
+        showErrors(response, setError, "Modification impossible"),
+      );
   };
 
   const deletePunchWorker = async (punchWorker) => {

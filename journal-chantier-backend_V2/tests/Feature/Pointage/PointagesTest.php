@@ -91,9 +91,9 @@ class PointagesTest extends JcdTestCase
         ])->assertStatus(422)->assertJsonValidationErrors(['type']);
     }
 
-    public function test_un_ouvrier_ne_peut_pas_etre_pointe_sur_deux_chantiers_le_meme_jour(): void
+      public function test_un_ouvrier_ne_peut_pas_depasser_9_heures_normales_par_jour_tous_chantiers(): void
     {
-        // Ali est déjà pointé sur "hiba" le 28/09
+        // CDC § 3.4.2 : Ali a déjà 8 h à "hiba" le 28/09 → 8 h de plus à Symphonie = 16 h > 9 h
         $symphonie = Punch::where('site_id', $this->siteId('Symphonie'))->whereDate('date', '2026-09-28')->first();
 
         $this->api($this->admin())->postJson('/api/punch-worker', [
@@ -101,7 +101,7 @@ class PointagesTest extends JcdTestCase
             'punch_id' => $symphonie->id,
             'type' => 1,
             'natural_hours' => 8,
-        ])->assertStatus(422)->assertJsonValidationErrors(['worker_id']);
+        ])->assertStatus(422)->assertJsonValidationErrors(['natural_hours']);
     }
 
     public function test_on_ne_peut_pas_valider_un_pointage_vide(): void
