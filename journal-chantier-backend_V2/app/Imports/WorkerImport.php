@@ -4,102 +4,156 @@ namespace App\Imports;
 
 use App\Models\Resource;
 use App\Models\Worker;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
-use Maatwebsite\Excel\Concerns\ToModel;
+use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
-use Maatwebsite\Excel\Concerns\WithValidation;
 
 /**
- * Import des ouvriers (Canvas ou fichier « Tous les ouvriers »).
+ * Import Excel de la liste du personnel (CDC V3 § 3.3.3).
  *
- *  - Matricule NOUVEAU   : l'ouvrier est créé (situation ACTIF par défaut).
- *  - Matricule EXISTANT  : rien n'est écrasé, SAUF la « situation_actuelle »
- *                          (mise à jour en masse, CDC § 3.3.3).
- *  - « situation_actuelle » : ACTIF ou INACTIF (vide = ne change rien / ACTIF pour un nouveau).
- *    Seuls les profils RH (permission "manage worker status") peuvent la modifier ;
- *    pour les autres, la colonne est ignorée.
+ * Colonnes : Matricule | Nom | Qualification | Type de contrat | Situation Actuelle
+ * (les anciens en-têtes matricule / nom_complet / code_fonction / type_contrat restent acceptés).
+ *
+ *  - Matricule NOUVEAU  : l'ouvrier est créé (ACTIF si la situation est vide).
+ *  - Matricule EXISTANT : mise à jour sans doublon (nom, qualification, contrat, situation)
+ *                         → réservé aux profils RH ("manage worker status") ;
+ *                         pour les autres, la ligne est ignorée (comme avant).
+ *  - Chaque ligne est vérifiée : les lignes correctes sont enregistrées,
+ *    les lignes en erreur sont listées dans le rapport (ligne, matricule, message).
  */
-class WorkerImport implements ToModel, WithHeadingRow, WithValidation
+class WorkerImport implements ToCollection, WithHeadingRow
 {
+    public const CONTRACT_TYPES = ['CDC', 'TECTRA', 'ANAPEC', 'CDI'];
+
     public int $created = 0;
     public int $updated = 0;
+    public array $errors = [];
 
     private bool $canManageStatus;
+    private Collection $resources;
 
     public function __construct()
     {
         $this->canManageStatus = Gate::allows('manage worker status');
     }
 
-    public function model(array $row)
+    public function collection(Collection $rows)
     {
-        $situation = $this->situation($row);
+        // Qualifications : recherche par nom (« Maçon ») ou par code (« RSR… »), sans tenir compte des majuscules
+        $this->resources = Resource::all();
 
-        $existing = Worker::where('registration_number', $row['matricule'])->first();
+        $seen = [];
 
-        if ($existing) {
-            // Mise à jour en masse : seulement la situation, et seulement par un profil RH
-            if ($this->canManageStatus && $situation !== null && $existing->is_active !== ($situation === 'ACTIF')) {
-                $existing->update(['is_active' => $situation === 'ACTIF']);
-                $this->updated++;
+        foreach ($rows as $index => $row) {
+            $line = $index + 2; // numéro de ligne dans Excel (ligne 1 = en-têtes)
+
+            $registration = $this->text($row, ['matricule']);
+            $name = $this->text($row, ['nom', 'nom_complet']);
+            $qualification = $this->text($row, ['qualification', 'code_fonction']);
+            $contract = mb_strtoupper($this->text($row, ['type_de_contrat', 'type_contrat']));
+            $situation = mb_strtoupper($this->text($row, ['situation_actuelle']));
+
+            // Ligne vide : ignorée
+            if ($registration === '' && $name === '' && $qualification === '' && $contract === '' && $situation === '') {
+                continue;
             }
 
-            return null;
+            $messages = [];
+
+            if ($registration === '') {
+                $messages[] = 'Le matricule est obligatoire.';
+            } elseif (isset($seen[$registration])) {
+                $messages[] = "Matricule en double dans le fichier (déjà à la ligne {$seen[$registration]}).";
+            }
+
+            if ($name === '') {
+                $messages[] = 'Le nom est obligatoire.';
+            }
+
+            $resource = $this->findResource($qualification);
+            if ($qualification === '') {
+                $messages[] = 'La qualification est obligatoire.';
+            } elseif (!$resource) {
+                $messages[] = "Qualification inconnue : « {$qualification} ».";
+            }
+
+            if (!in_array($contract, self::CONTRACT_TYPES, true)) {
+                $messages[] = 'Le type de contrat doit être ' . implode(', ', self::CONTRACT_TYPES) . '.';
+            }
+
+            if ($situation !== '' && !in_array($situation, ['ACTIF', 'INACTIF'], true)) {
+                $messages[] = 'La situation actuelle doit être ACTIF ou INACTIF.';
+            }
+
+            if ($messages) {
+                $this->errors[] = ['line' => $line, 'registration_number' => $registration, 'message' => implode(' ', $messages)];
+                continue;
+            }
+
+            $seen[$registration] = $line;
+
+            $fields = [
+                'name' => mb_substr($name, 0, 150),
+                'resource_id' => $resource->id,
+                'contract_type' => $contract,
+            ];
+
+            $existing = Worker::where('registration_number', $registration)->first();
+
+            if ($existing) {
+                // Mise à jour en masse : réservée aux profils RH
+                if (!$this->canManageStatus) {
+                    continue;
+                }
+
+                if ($situation !== '') {
+                    $fields['is_active'] = $situation === 'ACTIF';
+                }
+
+                $existing->fill($fields);
+
+                if ($existing->isDirty()) {
+                    $existing->save();
+                    $this->updated++;
+                }
+
+                continue;
+            }
+
+            Worker::create($fields + [
+                'registration_number' => $registration,
+                'is_active' => !($this->canManageStatus && $situation === 'INACTIF'),
+            ]);
+            $this->created++;
         }
-
-        $this->created++;
-
-        return new Worker([
-            'registration_number' => $row['matricule'],
-            'name' => $row['nom_complet'],
-            'contract_type' => $row['type_contrat'],
-            'resource_id' => $this->getResourceIdByCode($row['code_fonction']),
-            'is_active' => $this->canManageStatus && $situation === 'INACTIF' ? false : true,
-        ]);
     }
 
     /**
-     * ACTIF / INACTIF accepté en minuscules ou avec des espaces (« actif », « Inactif ») ; vide = null.
+     * Valeur texte d'une colonne (premier en-tête trouvé parmi les noms acceptés).
      */
-    public function prepareForValidation($data, $index)
+    private function text($row, array $keys): string
     {
-        if (isset($data['situation_actuelle'])) {
-            $data['situation_actuelle'] = mb_strtoupper(trim((string) $data['situation_actuelle'])) ?: null;
+        foreach ($keys as $key) {
+            if (isset($row[$key]) && trim((string) $row[$key]) !== '') {
+                return trim((string) $row[$key]);
+            }
         }
 
-        return $data;
+        return '';
     }
 
-    public function rules(): array
+    private function findResource(string $value): ?Resource
     {
-        return [
-            'matricule' => 'required',
-            'nom_complet' => ['required', 'string', 'max:150'],
-            'type_contrat' => ['required', 'string', 'max:150', 'in:CDC,TECTRA,ANAPEC,CDI'],
-            'code_fonction' => 'required|exists:resources,code',
-            'situation_actuelle' => ['nullable', 'in:ACTIF,INACTIF'],
-        ];
-    }
+        if ($value === '') {
+            return null;
+        }
 
-    public function customValidationMessages(): array
-    {
-        return [
-            'situation_actuelle.in' => 'La situation actuelle doit être ACTIF ou INACTIF.',
-            'type_contrat.in' => 'Le type de contrat doit être CDC, TECTRA, ANAPEC ou CDI.',
-            'code_fonction.exists' => 'Code fonction inconnu.',
-        ];
-    }
+        $value = mb_strtolower($value);
 
-    private function situation(array $row): ?string
-    {
-        $value = mb_strtoupper(trim((string) ($row['situation_actuelle'] ?? '')));
-
-        return in_array($value, ['ACTIF', 'INACTIF'], true) ? $value : null;
-    }
-
-    private function getResourceIdByCode($code)
-    {
-        $resource = Resource::where('code', $code)->first();
-        return $resource ? $resource->id : null;
+        return $this->resources->first(
+            fn($resource) => mb_strtolower(trim((string) $resource->name)) === $value
+                || mb_strtolower(trim((string) $resource->code)) === $value
+        );
     }
 }

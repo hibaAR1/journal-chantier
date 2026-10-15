@@ -81,7 +81,7 @@ class OuvriersTest extends JcdTestCase
         $this->api($this->admin())->get('/api/worker/export/all')->assertOk()->assertDownload('ouvriers.xlsx');
     }
 
-    public function test_on_peut_importer_des_ouvriers_depuis_excel(): void
+       public function test_on_peut_importer_des_ouvriers_depuis_excel(): void
     {
         // Code de la fonction "Maçon" (généré automatiquement : RSR…)
         $code = Resource::where('name', 'Maçon')->value('code');
@@ -95,8 +95,9 @@ class OuvriersTest extends JcdTestCase
         ])->assertStatus(201);
 
         $this->assertDatabaseHas('workers', ['registration_number' => 'T200', 'name' => 'Rachid Import']);
-        // Un matricule déjà existant n'est pas écrasé
-        $this->assertDatabaseMissing('workers', ['name' => 'Déjà existant']);
+        // Un matricule déjà existant est mis à jour, sans doublon (CDC § 3.3.3)
+        $this->assertEquals(1, Worker::where('registration_number', 'T001')->count());
+        $this->assertDatabaseHas('workers', ['registration_number' => 'T001', 'name' => 'Déjà existant']);
     }
 
     public function test_un_fichier_d_import_avec_une_fonction_inconnue_est_refuse(): void

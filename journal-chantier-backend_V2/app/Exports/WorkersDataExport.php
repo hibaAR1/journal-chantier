@@ -7,16 +7,15 @@ use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithStyles;
-use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 /**
- * Export « Tous les ouvriers ».
+ * Export « Tous les ouvriers » = modèle de mise à jour en masse (CDC § 3.3.3).
  *
- * Les 5 premières colonnes ont les MÊMES noms que le fichier d'import (Canvas) :
- * le RH peut télécharger ce fichier, changer la « situation_actuelle » (liste déroulante
- * ACTIF / INACTIF) et le réimporter → mise à jour en masse par matricule (CDC § 3.3.3).
- * Les colonnes code et fonction sont là pour information (ignorées à l'import).
+ * Colonnes : Matricule | Nom | Qualification | Type de contrat | Situation Actuelle | Code
+ * Le RH corrige ce fichier (nom, qualification, contrat, ACTIF / INACTIF…) puis le réimporte :
+ * les ouvriers sont retrouvés par leur Matricule et mis à jour, sans doublon.
+ * La colonne Code est là pour information (ignorée à l'import).
  */
 class WorkersDataExport implements FromCollection, WithHeadings, WithStyles, ShouldAutoSize
 {
@@ -31,12 +30,11 @@ class WorkersDataExport implements FromCollection, WithHeadings, WithStyles, Sho
             ->map(function ($worker) {
                 return [
                     'matricule' => $worker->registration_number,
-                    'nom_complet' => $worker->name,
-                    'type_contrat' => $worker->contract_type,
-                    'code_fonction' => $worker->resourceRel?->code,
+                    'nom' => $worker->name,
+                    'qualification' => $worker->resourceRel?->name,
+                    'type_de_contrat' => $worker->contract_type,
                     'situation_actuelle' => $worker->is_active ? 'ACTIF' : 'INACTIF',
                     'code' => $worker->code,
-                    'fonction' => $worker->resourceRel?->name,
                 ];
             });
     }
@@ -46,32 +44,16 @@ class WorkersDataExport implements FromCollection, WithHeadings, WithStyles, Sho
      */
     public function headings(): array
     {
-        return [
-            'matricule',
-            'nom_complet',
-            'type_contrat',
-            'code_fonction',
-            'situation_actuelle',
-            'code',
-            'fonction',
-        ];
+        return ['Matricule', 'Nom', 'Qualification', 'Type de contrat', 'Situation Actuelle', 'Code'];
     }
 
     public function styles(Worksheet $sheet)
     {
-        // Colonne E « situation_actuelle » : liste déroulante ACTIF / INACTIF
+        // Listes déroulantes : Type de contrat (D) et Situation Actuelle (E)
         $lastRow = max($sheet->getHighestRow(), 2) + 500;
 
-        $validation = $sheet->getCell('E2')->getDataValidation();
-        $validation->setType(DataValidation::TYPE_LIST)
-            ->setErrorStyle(DataValidation::STYLE_STOP)
-            ->setAllowBlank(true)
-            ->setShowDropDown(true)
-            ->setShowErrorMessage(true)
-            ->setErrorTitle('Situation actuelle')
-            ->setError('Choisissez ACTIF ou INACTIF dans la liste.')
-            ->setFormula1('"ACTIF,INACTIF"')
-            ->setSqref('E2:E' . $lastRow);
+        WorkerExport::dropdown($sheet, 'D', $lastRow, 'CDC,TECTRA,ANAPEC,CDI', 'Type de contrat', 'Choisissez CDC, TECTRA, ANAPEC ou CDI dans la liste.');
+        WorkerExport::dropdown($sheet, 'E', $lastRow, 'ACTIF,INACTIF', 'Situation Actuelle', 'Choisissez ACTIF ou INACTIF dans la liste.');
 
         return [
             1 => ['font' => ['bold' => true]],

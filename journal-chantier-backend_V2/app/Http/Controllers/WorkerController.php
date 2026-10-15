@@ -163,37 +163,24 @@ class WorkerController extends Controller
         try {
             $import = new WorkerImport();
             Excel::import($import, $request->file('file'));
-
-            // Rapport : ouvriers ajoutés + situations mises à jour (CDC § 3.3.3)
-            return response()->json([
-                'message' => "{$import->created} ouvrier(s) ajouté(s), {$import->updated} situation(s) mise(s) à jour.",
-                'created' => $import->created,
-                'updated' => $import->updated,
-            ], 201);
-
-        } catch (\Maatwebsite\Excel\Validators\ValidationException $e) {
-            $failures = $e->failures();
-            $errors = [];
-
-            foreach ($failures as $failure) {
-                $errors[] = [
-                    'row' => $failure->row(),
-                    'attribute' => $failure->attribute(),
-                    'errors' => $failure->errors()
-                ];
-            }
-
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $errors
-            ], 422);
-
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Error importing workers',
                 'error' => $e->getMessage()
             ], 500);
         }
+
+        // Rapport d'import (CDC § 3.3.3) : lignes ajoutées / mises à jour + détail des erreurs.
+        // Les lignes correctes sont enregistrées même s'il y a des erreurs ailleurs dans le fichier.
+        $nothingSaved = $import->created === 0 && $import->updated === 0;
+
+        return response()->json([
+            'message' => "{$import->created} ouvrier(s) ajouté(s), {$import->updated} ouvrier(s) mis à jour, "
+                . count($import->errors) . ' erreur(s).',
+            'created' => $import->created,
+            'updated' => $import->updated,
+            'errors' => $import->errors,
+        ], $nothingSaved && $import->errors ? 422 : 201);
     }
 
     private function checkWorker($id) {

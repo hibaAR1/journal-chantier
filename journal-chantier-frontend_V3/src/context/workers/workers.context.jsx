@@ -20,6 +20,8 @@ const WorkersContext = createContext({
   uploadWorkers: () => {},
   exportAllWorkers: () => {},
   toggleWorkerStatus: () => {},
+  importReport: null,
+  setImportReport: () => {},
 });
 
 export const WorkersProvider = ({ children }) => {
@@ -28,6 +30,8 @@ export const WorkersProvider = ({ children }) => {
 
   const [workers, setWorkers] = useState([]);
   const [resources, setResources] = useState([]);
+  // Rapport du dernier import (CDC § 3.3.3) : {message, created, updated, errors: [{line, registration_number, message}]}
+  const [importReport, setImportReport] = useState(null);
 
   const { toast } = useToast();
 
@@ -211,12 +215,15 @@ export const WorkersProvider = ({ children }) => {
     const handleSuccess = async (data) => {
       await getWorkers();
 
-      // Rapport d'import : ouvriers ajoutés + situations (ACTIF / INACTIF) mises à jour
+      // Rapport d'import : ouvriers ajoutés / mis à jour + erreurs éventuelles
       toast({
-        variant: "success",
-        title: "Importation réussie",
+        variant: data?.errors?.length ? "warning" : "success",
+        title: "Importation terminée",
         description: data?.message ?? `Ouvriers ont été importés avec succès`,
       });
+
+      // S'il y a des erreurs, la fenêtre du rapport s'ouvre avec le détail ligne par ligne
+      if (data?.errors?.length) setImportReport(data);
 
       setImportLoading(false);
       setLoading(false);
@@ -228,21 +235,23 @@ export const WorkersProvider = ({ children }) => {
 
     return await WorkersApis.upload(values)
       .then(({ data }) => {
-        // setWorkers([...workers, ...response.data.workers]);
         handleSuccess(data);
       })
       .catch((error) => {
         console.error("Full Axios error:", error);
-        console.log("Error message:", error.message);
 
-        // Première erreur du fichier, avec son numéro de ligne Excel
-        const firstError = error.response?.data?.errors?.[0];
+        const data = error.response?.data;
+
+        // Aucune ligne correcte : on affiche quand même le rapport des erreurs
+        if (data?.errors?.length) {
+          setImportReport(data);
+        }
 
         toast({
           variant: "danger",
           title: "Importation echouée",
-          description: firstError
-            ? `Ligne ${firstError.row} : ${firstError.errors.join(" ")}`
+          description: data?.errors?.length
+            ? `Aucune ligne n'a été enregistrée : ${data.errors.length} erreur(s).`
             : `Une erreur s'est produite lors de l'importation des ouvriers`,
         });
 
@@ -305,6 +314,8 @@ export const WorkersProvider = ({ children }) => {
         uploadWorkers,
         exportAllWorkers,
         toggleWorkerStatus,
+        importReport,
+        setImportReport,
       }}
     >
       {children}

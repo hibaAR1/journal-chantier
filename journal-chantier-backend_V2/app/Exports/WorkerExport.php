@@ -25,12 +25,12 @@ class WorkerExport implements FromCollection, WithHeadings, WithStyles
     {
         return [
             [
-                'matricule',
-                'nom_complet',
-                'type_contrat',
-                'code_fonction',
-                // Situation Actuelle (CDC § 3.3) : liste déroulante ACTIF / INACTIF
-                'situation_actuelle',
+                // Colonnes du modèle (CDC § 3.3.3)
+                'Matricule',
+                'Nom',
+                'Qualification',
+                'Type de contrat',
+                'Situation Actuelle',
             ],
         ];
     }
@@ -87,18 +87,29 @@ class WorkerExport implements FromCollection, WithHeadings, WithStyles
 
         $worksheet->getStyle('A2:E2')->applyFromArray($contentStyleArray);
 
-        // Colonne E « situation_actuelle » : liste déroulante ACTIF / INACTIF (lignes 2 à 1000)
-        $validation = $worksheet->getCell('E2')->getDataValidation();
+        // Listes déroulantes (lignes 2 à 1000) : Type de contrat (D) et Situation Actuelle (E)
+        self::dropdown($worksheet, 'D', 1000, 'CDC,TECTRA,ANAPEC,CDI', 'Type de contrat', 'Choisissez CDC, TECTRA, ANAPEC ou CDI dans la liste.');
+        self::dropdown($worksheet, 'E', 1000, 'ACTIF,INACTIF', 'Situation Actuelle', 'Choisissez ACTIF ou INACTIF dans la liste.');
+
+        foreach (['A' => 15, 'B' => 30, 'C' => 25, 'D' => 18, 'E' => 20] as $column => $width) {
+            $worksheet->getColumnDimension($column)->setWidth($width);
+        }
+    }
+
+    /**
+     * Liste déroulante Excel sur une colonne (de la ligne 2 à $lastRow).
+     */
+    public static function dropdown(Worksheet $worksheet, string $column, int $lastRow, string $values, string $title, string $error): void
+    {
+        $validation = $worksheet->getCell($column . '2')->getDataValidation();
         $validation->setType(DataValidation::TYPE_LIST)
             ->setErrorStyle(DataValidation::STYLE_STOP)
             ->setAllowBlank(true)
             ->setShowDropDown(true)
             ->setShowErrorMessage(true)
-            ->setErrorTitle('Situation actuelle')
-            ->setError('Choisissez ACTIF ou INACTIF dans la liste.')
-            ->setFormula1('"ACTIF,INACTIF"')
-            ->setSqref('E2:E1000');
-
-        $worksheet->getColumnDimension('E')->setWidth(20);
+            ->setErrorTitle($title)
+            ->setError($error)
+            ->setFormula1('"' . $values . '"')
+            ->setSqref($column . '2:' . $column . $lastRow);
     }
 }
