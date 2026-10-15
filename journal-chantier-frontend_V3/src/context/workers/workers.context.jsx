@@ -208,13 +208,14 @@ export const WorkersProvider = ({ children }) => {
   const uploadWorkers = async (values, form) => {
     const { setError, reset } = form;
 
-    const handleSuccess = async () => {
+    const handleSuccess = async (data) => {
       await getWorkers();
 
+      // Rapport d'import : ouvriers ajoutés + situations (ACTIF / INACTIF) mises à jour
       toast({
         variant: "success",
         title: "Importation réussie",
-        description: `Ouvriers ont été importés avec succès`,
+        description: data?.message ?? `Ouvriers ont été importés avec succès`,
       });
 
       setImportLoading(false);
@@ -226,18 +227,23 @@ export const WorkersProvider = ({ children }) => {
     setLoading(true);
 
     return await WorkersApis.upload(values)
-      .then(() => {
+      .then(({ data }) => {
         // setWorkers([...workers, ...response.data.workers]);
-        handleSuccess();
+        handleSuccess(data);
       })
       .catch((error) => {
         console.error("Full Axios error:", error);
         console.log("Error message:", error.message);
 
+        // Première erreur du fichier, avec son numéro de ligne Excel
+        const firstError = error.response?.data?.errors?.[0];
+
         toast({
           variant: "danger",
           title: "Importation echouée",
-          description: `Une erreur s'est produite lors de l'importation des ouvriers`,
+          description: firstError
+            ? `Ligne ${firstError.row} : ${firstError.errors.join(" ")}`
+            : `Une erreur s'est produite lors de l'importation des ouvriers`,
         });
 
         setImportLoading(false);

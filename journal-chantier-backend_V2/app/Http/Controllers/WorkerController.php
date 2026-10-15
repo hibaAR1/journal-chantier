@@ -161,10 +161,14 @@ class WorkerController extends Controller
         ]);
 
         try {
-            Excel::import(new WorkerImport, $request->file('file'));
+            $import = new WorkerImport();
+            Excel::import($import, $request->file('file'));
 
+            // Rapport : ouvriers ajoutés + situations mises à jour (CDC § 3.3.3)
             return response()->json([
-                'message' => 'Workers imported successfully'
+                'message' => "{$import->created} ouvrier(s) ajouté(s), {$import->updated} situation(s) mise(s) à jour.",
+                'created' => $import->created,
+                'updated' => $import->updated,
             ], 201);
 
         } catch (\Maatwebsite\Excel\Validators\ValidationException $e) {

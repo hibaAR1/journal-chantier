@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useRef, useState } from "react";
 
 import DashboardApis from "../../apis/dashboard.apis.jsx";
 import SitesApis from "../../apis/sites.apis.jsx";
@@ -113,7 +113,14 @@ export const DashboardProvider = ({ children }) => {
 
   // filters = { from, to, workTypeId } — dates au format "yyyy-MM-dd" (optionnelles)
   // siteIds = chantiers choisis dans le sélecteur (vide = tous les chantiers actifs)
+  // Numéro de la dernière demande : si plusieurs demandes partent (clics rapides),
+  // seule la réponse de la DERNIÈRE est affichée (une ancienne réponse lente ne l'écrase pas).
+  const comparisonRequest = useRef(0);
+
   const getComparison = async ({ from, to, workTypeId, siteIds } = {}) => {
+    const requestId = ++comparisonRequest.current;
+    const isLatest = () => requestId === comparisonRequest.current;
+
     setComparisonLoading(true);
     setComparisonError(null);
 
@@ -123,13 +130,16 @@ export const DashboardProvider = ({ children }) => {
       work_type_id: workTypeId || undefined,
       site_ids: siteIds?.length ? siteIds : undefined,
     })
-      .then(({ data }) => setComparison(data))
+      .then(({ data }) => {
+        if (isLatest()) setComparison(data);
+      })
       .catch(({ response }) => {
+        if (!isLatest()) return;
         setComparison(null);
         setComparisonError(errorMessage(response));
       });
 
-    setComparisonLoading(false);
+    if (isLatest()) setComparisonLoading(false);
   };
 
   // filters = { workId, from, to } — dates au format "yyyy-MM-dd" (optionnelles)

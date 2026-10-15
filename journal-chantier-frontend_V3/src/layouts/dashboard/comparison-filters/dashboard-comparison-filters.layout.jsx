@@ -44,27 +44,48 @@ const DashboardComparisonFiltersLayout = ({
   const [periodOpen, setPeriodOpen] = useState(false);
   const [sitesOpen, setSitesOpen] = useState(false);
 
+  // Choix en cours dans la liste des chantiers (brouillon) : les cases se cochent tout de suite,
+  // mais le tableau de bord n'est rechargé qu'UNE fois, à la fermeture de la liste ou avec « Appliquer ».
+  // (Avant : chaque clic relançait un chargement → la page restait longtemps en chargement.)
+  const [draftSiteIds, setDraftSiteIds] = useState(selectedSiteIds);
+
+  const sameSelection = (a, b) =>
+    a.length === b.length && a.every((id) => b.includes(id));
+
+  const handleSitesOpenChange = (open) => {
+    if (open) {
+      setDraftSiteIds(selectedSiteIds);
+    } else if (!sameSelection(draftSiteIds, selectedSiteIds)) {
+      onSitesChange(draftSiteIds);
+    }
+
+    setSitesOpen(open);
+  };
+
   const typeLabel = PERIOD_TYPES.find(
     (type) => type.value === periodType,
   )?.label;
 
   // Aucun chantier coché = tous les chantiers actifs
   const allSelected = selectedSiteIds.length === 0;
-  const isChecked = (id) => allSelected || selectedSiteIds.includes(id);
   const checkedCount = allSelected
     ? activeSites.length
     : activeSites.filter((site) => selectedSiteIds.includes(site.id)).length;
 
+  // Cases de la liste : d'après le brouillon
+  const draftAll = draftSiteIds.length === 0;
+  const isChecked = (id) => draftAll || draftSiteIds.includes(id);
+
   const toggleSite = (id) => {
-    const current = allSelected
+    const current = draftAll
       ? activeSites.map((site) => site.id)
-      : selectedSiteIds;
+      : draftSiteIds;
     const next = current.includes(id)
       ? current.filter((siteId) => siteId !== id)
       : [...current, id];
 
     // Tout coché (ou rien) = revenir à "tous"
-    onSitesChange(
+    setDraftSiteIds(
       next.length === activeSites.length || next.length === 0 ? [] : next,
     );
   };
@@ -155,7 +176,7 @@ const DashboardComparisonFiltersLayout = ({
       </Popover>
 
       {/* Sélecteur "N chantiers actifs ▾" : recherche + cases à cocher */}
-      <Popover open={sitesOpen} onOpenChange={setSitesOpen}>
+      <Popover open={sitesOpen} onOpenChange={handleSitesOpenChange}>
         <PopoverTrigger asChild>
           <Button
             variant="primaryControl"
@@ -174,12 +195,12 @@ const DashboardComparisonFiltersLayout = ({
               <CommandGroup>
                 <CommandItem
                   value="Tous les chantiers"
-                  onSelect={() => onSitesChange([])}
+                  onSelect={() => setDraftSiteIds([])}
                 >
                   <input
                     type="checkbox"
                     readOnly
-                    checked={allSelected}
+                    checked={draftAll}
                     className="mr-2"
                   />
                   Tous les chantiers
@@ -202,6 +223,18 @@ const DashboardComparisonFiltersLayout = ({
               </CommandGroup>
             </CommandList>
           </Command>
+
+          {/* Applique le choix et ferme la liste (fermer en cliquant à côté applique aussi) */}
+          <div className="p-2 border-t border-primary-100">
+            <Button
+              type="button"
+              variant="primary"
+              className="w-full"
+              onClick={() => handleSitesOpenChange(false)}
+            >
+              Appliquer
+            </Button>
+          </div>
         </PopoverContent>
       </Popover>
     </div>
